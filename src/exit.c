@@ -1,10 +1,8 @@
-// exit.c
-#include "jsh_bib.h"
-#include <stdio.h>
-#include <stdlib.h>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 int main() {
-    
-    printf("Exiting shell...\n");
-    exit(0);
+   
+    syscall(SYS_exit_group, 0);
+
 }

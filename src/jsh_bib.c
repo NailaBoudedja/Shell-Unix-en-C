@@ -55,6 +55,9 @@ void initializeJsh()
 
     jsh.dollar.val = "$ ";  
     jsh.dollar.dollar_color = "\033[34m";  //couleur standard (bleu)
+
+    jsh.ret.newret=0 ;
+    jsh.ret.oldret= 0 ;
 }
 
 
@@ -106,14 +109,99 @@ void afficherJsh()
 
 //convertir une chaine de char en tableau de mots
 char **stringToWords(char *input) {
-   //
+   
+    int i = 0; //parcourir input
+    int j = 0; //parcourir les mots du result
+    int k = 0; //parcourir les char du mot
+    
+    char **result = (char **)malloc(3 * sizeof(char *)); //contient au max 3 mots
+
+    for (j = 0; j < 3; j++) {
+        result[j] = (char *)malloc(100 * sizeof(char)); //allocation d'espace memoire pour chaque mot
+    }
+
+    j = 0; //réinitialiser j
+
+    while (input[i] != '\0') { //tq on est pas arrivé a la fin de input
+        if (input[i] != ' ' && input[i] != '\t' && input[i] != '\n') {
+            result[j][k] = input[i]; 
+            k++;
+        } else {
+            result[j][k] = '\0'; //fin du mot
+            j++;
+            k = 0;
+        }
+        i++;
+    }
+
+    result[j][k] = '\0'; // Terminer le dernier mot
+    return result;
 }
 
 
-//executer une commande donnée
-void executerCommand(char *command)
-{
-  //
+
+
+int executerCommand(char *command) {
+    int ret = 0;
+    pid_t pid = fork();  //creer un processus fils pour se charger de l'execution de la commande entree
+   
+    if (pid < 0) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    } else if (pid == 0) { 
+        //prog du fils
+        
+        //organiser la commande entrée dans un tableau sous forme {command, arguments, NULL}
+        char **cmd = stringToWords(command);
+
+        if (cmd[0] != NULL) {   //detecter la commande saisie
+
+            if (cmd[0][0] == 'c' && cmd[0][1] == 'd' && cmd[0][2] == '\0') {
+                ret = execvp("./cd.c", cmd);
+                
+            } else if (cmd[0][0] == 'p' && cmd[0][1] == 'w' && cmd[0][2] == 'd' && cmd[0][3] == '\0') {
+                ret = execlp("./pwd", "./pwd", (char *)NULL);
+            } else if (cmd[0][0] == '?' && cmd[0][1] == '\0') {
+               //reccuperer la derniere valeur retournée
+               char oldret[2];
+               oldret[0] = '0' + jsh.ret.oldret;  //stocker la valeur dans une chaine 
+               oldret[1] = '\0';
+               //passer la valeur de retour en parametre pour ?
+               ret = execlp("./retCmd", "./retCmd", oldret, (char *)NULL);
+
+            } else if (cmd[0][0] == 'e' && cmd[0][1] == 'x' && cmd[0][2] == 'i' && cmd[0][3] == 't' && cmd[0][4] == '\0') {
+                ret = execlp("./exit", "./exit", (char *)NULL);
+            } else {
+                write(STDOUT_FILENO, "Command not known\n", 18);
+                ret = 1;
+            }
+
+            //erreur lors de l'execution
+            if (ret == -1) {
+                perror("exec");
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            //la commande saisie est vide
+            write(STDOUT_FILENO, "Empty command\n", 15);
+            ret = 1;
+        }
+
+        exit(ret);
+    } else { 
+        //prg du pere
+        
+        //attente active de la terminaison du fils
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status)) {
+            ret = WEXITSTATUS(status);   //terminaison normale
+        } else {
+            //terminaison non normale
+            write(STDOUT_FILENO, "Child process did not terminate normally\n", 41);
+            ret = 1;
+        }
+    }
+
+    return ret; //valeur de retour
 }
-
-
