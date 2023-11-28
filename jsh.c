@@ -1,23 +1,26 @@
-
-#include "jsh_bib.h" //include l'entete de la bibliothèque des fonctions de jsh
+#include "jsh_bib.h"
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 int main() {
-    initializeJsh();  //initialiser les parametres du prompt
-    while (1) { 
+    rl_outstream = stderr; //derriger la sortie vers la sortie d'erreur
+    char *input;
+    jsh.newret = 0 ;
+    jsh.oldret = 0;
+   
     
-        rl_initialize();   //initialiser readline
-        afficherJsh();    //afficher jsh
 
-        char *input = readline("");  //lire la commande saisite par l'utilisateur 
-        jsh.ret.oldret = jsh.ret.newret;  //mise a jour de l'ancienne valeur de retour
-        if (input && *input) {   //si la commande entrée n'est pas vide
+    while (1) {
+        input  =  readline(afficherJsh());  //affichage du prompt  + lecture de la commande entrée
+        if(input && *input) {   //si la commande entrée n'est pas vide
+            jsh.oldret = jsh.newret;
             add_history(input);  //ajout de la commande à l'historique du shell
-            jsh.ret.newret = executerCommand(input); //execution de la commande 
+            jsh.newret = executerCommande(input); //execution de la commande 
         }
-        free(input); //libérer l'espace memeoire alloué  
+        free(input);
     }
+
     return 0;
 }
