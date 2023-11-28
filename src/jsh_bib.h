@@ -19,7 +19,7 @@ struct Prompt {
         char *dollar_color;
     } dollar;
 };
-
+extern int stop;
 extern struct Prompt jsh;  //Déclaration de la variable globale jsh shell 
 
 
@@ -30,5 +30,5 @@ void initializeJsh(); //initialiser les champs du prompt jsh
 void afficherJsh();  //afficher le prompt 
 char **stringToWords(char *input); //convertir une chaine de caracteres en un tableau de mots
 void executerCommand(char *command);  //executer une commande
-
+int taille_chaine(char *chaine);
 #endif

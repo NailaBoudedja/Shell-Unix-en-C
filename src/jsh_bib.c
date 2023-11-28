@@ -8,11 +8,12 @@
 #include <sys/wait.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <linux/limits.h>
 
 #define MAX_PROMPT_SIZE 30   //définition de la taille maximale du prompt
 #define NORMAL_COLOR "\033[34m"   //définition de la couleur par défaut du prompt
 
-
+int stop ;
 struct Prompt jsh;    //déclaration du shell jsh
 
 
@@ -36,6 +37,18 @@ int stringLength(char *chaine)
     int length = 0;
     int i = 0;  //pour parcourir la chaine
     while (chaine[i] != '\0')  //fin de la chaine
+    {
+        length++;
+        i++;
+    }
+    return length;
+}
+
+int taille_chaine(char *chaine)
+{
+    int length = 0;
+    int i = 0;
+    while (chaine[i] != '\0')
     {
         length++;
         i++;
@@ -136,10 +149,20 @@ char **stringToWords(char *input) {
 }
 
 
+
 //executer une commande donnée
 void executerCommand(char *command)
 {
+    /*
+    int tube[2];
+    if (pipe(tube) == -1) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
+    */
 
+    // Convertir le descripteur de fichier du tube en chaîne
+    char tubeFdStr[10];
 
     pid_t pid = fork(); //créer un processus fils pour l'execution de la commande
 
@@ -155,23 +178,27 @@ void executerCommand(char *command)
 
         if (cmd[0][0] == 'c' && cmd[0][1] == 'd' && cmd[0][2] == '\0')
         {
-            execvp("./cd.c", cmd);
+            printf("%s \n","je suis dans cd");
         }
         else if (cmd[0][0] == 'p' && cmd[0][1] == 'w' && cmd[0][2] == 'd' && cmd[0][3] == '\0')
         {
-            execvp("./pwd.c", cmd);
+            printf("%s \n","je suis dans pwd");
         }
         else if (cmd[0][0] == '?' && cmd[0][1] == '\0')
         {
-            execvp("./?.c", cmd);
+            printf("%s \n","je suis dans ?");
         }
         else if (cmd[0][0] == 'e' && cmd[0][1] == 'x' && cmd[0][2] == 'i' && cmd[0][3] == 't' && cmd[0][4] == '\0')
         {
-   
-            execvp("./exit.c", cmd);
-           // execl("./exit", "./exit", tubeFdStr, (char *)NULL);
 
-            //execl("./exit", "./exit", (char *)NULL) ;
+            /*
+            close(tube[0]); // Fermer l'extrémité en lecture du tube dans le processus fils
+            snprintf(tubeFdStr, sizeof(tubeFdStr), "%d", tube[1]);
+            write(tube[1], &stop, sizeof(int)); // Écrire la valeur de stop dans le tube
+            execl("./exit", "./exit", tubeFdStr, (char *)NULL);
+            perror("execl");
+            exit(EXIT_FAILURE);  */
+            exit(1);
         }
         else
         {
@@ -184,8 +211,17 @@ void executerCommand(char *command)
     }
     else
     {
-        //attente active du processus parent
         wait(NULL);
+
+
+        /*
+      
+        //processus parent
+        close(tube[1]); // Fermer l'extrémité en écriture du tube dans le processus parent
+        // Lire depuis le tube
+        read(tube[0], &stop, sizeof(int));
+        printf("la valeur de stop apres exit %d \n", stop);  */
+    
     }
 }
 
