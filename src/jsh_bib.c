@@ -21,11 +21,11 @@ struct Prompt jsh;    //déclaration du shell jsh
 
 
 //a supprimer apres 
-char* getCurrentDirectory() {
+char* pwd() {
     char *currentDir = (char *)malloc(PATH_MAX);
     if (getcwd(currentDir, PATH_MAX) == NULL) {
         perror("getcwd");
-        exit(EXIT_FAILURE);
+        exit(1);
     }
     return currentDir;
 }
@@ -42,6 +42,19 @@ int stringLength(char *chaine)
         i++;
     }
     return length;
+}
+
+int retCommande(){ // fonciton ? 
+    char oldret[2];
+    oldret[0] = '0' + jsh.ret.oldret;
+    oldret[1] = '\0';
+    int val = write(STDOUT_FILENO,oldret,stringLength(oldret));
+    if (val > 0) return 0; 
+    else return 1;
+}
+
+int exitCommande (){ // fonction exit
+    exit();
 }
 
 int taille_chaine(char *chaine)
@@ -153,13 +166,7 @@ char **stringToWords(char *input) {
 //executer une commande donnée
 void executerCommand(char *command)
 {
-    /*
-    int tube[2];
-    if (pipe(tube) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
-    }
-    */
+    
 
     // Convertir le descripteur de fichier du tube en chaîne
     char tubeFdStr[10];
@@ -191,13 +198,6 @@ void executerCommand(char *command)
         else if (cmd[0][0] == 'e' && cmd[0][1] == 'x' && cmd[0][2] == 'i' && cmd[0][3] == 't' && cmd[0][4] == '\0')
         {
 
-            /*
-            close(tube[0]); // Fermer l'extrémité en lecture du tube dans le processus fils
-            snprintf(tubeFdStr, sizeof(tubeFdStr), "%d", tube[1]);
-            write(tube[1], &stop, sizeof(int)); // Écrire la valeur de stop dans le tube
-            execl("./exit", "./exit", tubeFdStr, (char *)NULL);
-            perror("execl");
-            exit(EXIT_FAILURE);  */
             exit(1);
         }
         else
@@ -212,17 +212,11 @@ void executerCommand(char *command)
     else
     {
         wait(NULL);
-
-
-        /*
-      
-        //processus parent
-        close(tube[1]); // Fermer l'extrémité en écriture du tube dans le processus parent
-        // Lire depuis le tube
-        read(tube[0], &stop, sizeof(int));
-        printf("la valeur de stop apres exit %d \n", stop);  */
     
     }
 }
+
+
+
 
 
