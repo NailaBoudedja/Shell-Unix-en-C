@@ -45,7 +45,7 @@ char *pwd() {
 
 int retCmd()
 {
-    return jsh.oldret;
+    return jsh.ret;
 }
  //fonction pour exiter le programme avec le code n
 int exitAvecArgument (int n){ 
@@ -275,8 +275,6 @@ int executerCommande(char * commande)
     char ** cmd = extraireMots(commande," ");
     if (strcmp(cmd[0]," ") == 0)
     {
-
-        printf("je suis dans espace\n");
         return retCmd();
     }
     else{
@@ -344,15 +342,11 @@ int executerCommande(char * commande)
            
             int status;
             waitpid(pid, &status, 0);
-            return WEXITSTATUS(status);
-            /*
             if ( WIFEXITED(status)) {
                    return (WEXITSTATUS(status)); // Terminaison normale
-            } 
-            else {
+            } else {
                    return 1;
             }
-            */
            
 
         }
@@ -365,5 +359,17 @@ int executerCommande(char * commande)
     
     
  // return 0;
+}
+
+int contientQueDesEspaces(const char *input) {
+    while (*input) {
+        if (!isspace((unsigned char)*input)) {
+            // Le caractère actuel n'est pas un espace
+            return 0; // Retourne faux
+        }
+        input++;
+    }
+    // Tous les caractères étaient des espaces
+    return 1; // Retourne vrai
 }
 
