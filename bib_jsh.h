@@ -1,17 +1,13 @@
-// jsh_bib.h
-#ifndef BIBV2_H
-#define BIBV2_H
+#ifndef BIB_JSH_H
+#define BIB_JSH_H
 
-//Définition de la structure Prompt
-struct Prompt {
-    int newret;   
-    int oldret;
-    char* oldPath;
-     
-
+//définition de la structure du Prompt
+struct Prompt { 
+    int ret;  //pour stocker la valeur de retour
+    char* oldPath;  //pour stocker le chemin du dernier rep du travail
 };
 
-extern struct Prompt jsh;  //Déclaration de la variable globale jsh shell 
+extern struct Prompt jsh;  //déclaration d'une variable externe du shell jsh 
 
 char *pwd();
 int exitAvecArgument (int n);
@@ -24,7 +20,5 @@ char *tronkString(const char *str, int size);
 char *afficherJsh();
 char **extraireMots(char *phrase, char *delimiteur);
 int executerCommande(char * commande);
-
-
 
 #endif

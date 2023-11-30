@@ -1,5 +1,4 @@
-#include "bibv2.h"
-#include <limits.h>
+#include "bib_jsh.h" 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,59 +7,65 @@
 #include <sys/wait.h>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include <linux/limits.h>
 #include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <limits.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <linux/limits.h>
+
+
 //définition des couleurs du prompt
-#define COLOR_RED "\033[31m"
+#define COLOR_RED "\033[31m" 
 #define COLOR_GREEN "\033[32m"
 #define COLOR_BLUE "\033[34m"
-#define COLOR_RESET "\033[0m" 
+
 //définition de la taille maximale du prompt
 #define MAX_PROMPT_SIZE 30 
+
 //définition du nombre maximum des arguments d'une commande 
 #define MAX_ARGS 20
 
-struct Prompt jsh;    //déclaration du shell jsh
+//déclaration du shell jsh
+struct Prompt jsh;   
 
 
-//fonction qui renvoie le chemin du rep courrant
-char *pwd() {
-    char *rep = (char *)malloc(PATH_MAX); //allocation d'espace memeoire pour stocker le chemin du répertoire courant
+/****************************** FONCTIONS DES COMMANDES ************************************/
+
+//fonction qui renvoie le chemin courrant 
+char *pwd() { 
+    char *rep = (char *)malloc(PATH_MAX); //allocation d'espace memoire pour stocker le chemin courrant
     if (getcwd(rep, PATH_MAX) == NULL)   //récupérer le répertoire courant
     {
         perror("erreur lorsq de réccuperation du chemin courrant");
-        free(rep);
-        exit(1);
-    } else
-        return rep;
+        free(rep);   //libérer l'espace memoire alloué pour rep
+        exit(1);   
+    }
+     else
+        return rep;  //renvoyer le chemin courrant 
 }
 
-
+//fonction qui renvoie la valeur de retour de la dernière commande executée
 int retCmd()
 {
-    return jsh.oldret;
+    return jsh.ret;
 }
- //fonction pour exiter le programme avec le code n
+
+//fonction pour quitter le programme avec le code n
 int exitAvecArgument (int n){ 
     exit(n);
 }
+
+//fonction pour quitter le programme avec la valeur de la dernière commande executée
 int exitSansArgument()
 {
-    int k= retCmd();
+    int k= retCmd();  //reccupérer la dernière valeur de retour
     exit(k);
 }
+
+//fonction exit complete
 int exitCmd(char * val)
 {
    if(val != NULL)
    {
-    return exitAvecArgument (atoi(val)); 
+      return exitAvecArgument (atoi(val)); 
    }
    else
    {
@@ -68,69 +73,63 @@ int exitCmd(char * val)
    }
 }
 
-
+//fonction qui teste si une reference est valide ou non
 int isReferenceValid(char *ref) {
     struct stat st;
-
-    // stat pour obtenir les infos du fichier ref
     if (lstat(ref, &st) == 0) {
         // Le fichier existe, donc la référence est valide.  
         return 0;
-    } else {
-        //perror("la référence n'est pas valide");  //afficher le message d'erreur 
+    } 
+    else {
+        //le fichier n'existe pas
         return 1;
     }
 }
 
+//fonction pour changer le rep courrant
 int cd( char * ref)
 {  
-   
-    //strcm avec vide
+    //si y a pas de ref entrée ---> cd vers Home
    if (ref == NULL) {
-        // Changer vers le répertoire home
-        const char *home_dir = getenv("HOME");
-
-        if (home_dir == NULL) {
-           // free(home_dir);
-            fprintf(stderr, "Impossible de récupérer la variable d'environnement $HOME.\n");
+       
+        const char *home = getenv("HOME");  //récuperer le chemin de Home
+        if (home == NULL) {
+            //free(home);
+            perror("erreur lors de récupération de la variable $HOME");
             return 1;
         }
-        jsh.oldPath = pwd();
-        if (chdir(home_dir) != 0) {
-            // free(home_dir);
-            perror("chdir home");
+        jsh.oldPath = pwd(); //stocker le chemin du rep courrant avant le changer
+        if (chdir(home) != 0) {  //cd vers Home
+            //free(home);
+            perror("erreur lors de changement de repertoir vers Home");
             return 1;
         }
     }
-    else{
-        //cd vers pere
-        if (strcmp(ref, "-") == 0) {
-            const char *prev_dir = jsh.oldPath;
-            if (prev_dir == NULL) {
-               // free(prev_dir);
-                fprintf(stderr, "Impossible de récupérer la variable d'environnement $OLDPWD.\n");
+    //ref != NULL 
+    else{  
+        if (strcmp(ref, "-") == 0) {  //cd vers le dernier rep courrant
+            if (jsh.oldPath == NULL) {
+                perror("erreur lors de changement de repertoir vers -");
                 return 1;
             }
 
-            if (chdir(prev_dir) != 0) {
-                // free(prev_dir);
-                perror("chdir old path");
+            if (chdir(jsh.oldPath) != 0) {
+                perror("erreur lors de changement de repertoir vers -");
                 return 1;
             }
         }
-        else{
-            //cd ref
+        else{   //cd vers ref
             if(isReferenceValid(ref) == 0)
-            {
-            jsh.oldPath = pwd();
-            if (chdir(ref) != 0) {
-                perror("chdir");
+            {  //si la ref entrée est valide  
+            jsh.oldPath = pwd(); //stocker le chemin du rep courrant avant le changer
+            if (chdir(ref) != 0) {  
+                perror("erreur lors de changement de repertoir courrant");
                 return 1;
             }
             }
             else{
-                //ref non valide
-                fprintf(stderr, "bash: cd: %s: No such file or directory\n", ref);
+                //si la ref n'est pas valide
+                perror(ref);
                 return 1;
             }
         } 
@@ -143,34 +142,23 @@ int cd( char * ref)
 
 }
 
-char *tronkString(const char *str, int size) {
-    // Vérifier si la taille est valide
-    if (size <= 0) {
-        return NULL;
-    }
 
-    int strLength = strlen(str);
 
-    // Vérifier si la taille demandée est plus grande que la longueur de la chaîne
-    if (size > strLength) {
-        fprintf(stderr, "Taille demandée plus grande que la longueur de la chaîne.\n");
-        return NULL;
-    }
+/*****************************  FONCTIONS D'AFFICHAGE DU PROMPT  ********************************/
 
-    // Calculer l'indice de début du sous-string
-    int startIndex = strLength - size;
-
-    // Allouer dynamiquement la mémoire pour le sous-string
-    char *subStr = (char *)malloc((size + 1) * sizeof(char));
-
-    // Copier le sous-string
-    strncpy(subStr, str + startIndex, size);
-
-    // Ajouter le caractère de fin de chaîne
-    subStr[size] = '\0';
-
-    return subStr;
+//fonction pour tronker une chaine de char selon la taille entrée
+char *tronkString(const char *chaine, int taille) {
+    int chaineLength = strlen(chaine);  //calculer la taille de la chaine entrée
+    int debut = chaineLength - taille;  //calculer le debut de la sous chaine a retourner
+    char *resultat = (char *)malloc((taille + 1) * sizeof(char)); //stocker la sosu chaine a retourner
+    strncpy(resultat, chaine + debut, taille);  //copier la sous chaine vers resultat
+    resultat[taille] = '\0';  //fin chaine
+    return resultat;
 }
+
+
+
+
 
 char *afficherJsh() {
     char result[MAX_PROMPT_SIZE * 2] = ""; // Initialisez result avec une chaîne nulle
@@ -204,6 +192,8 @@ char *afficherJsh() {
 }
 
 
+
+/******************************FONCTIONS D'EXECUTIONS**********************************/
 char **extraireMots(char *phrase, char *delimiteur) {
     // Vérifier si la chaîne contient uniquement des espaces
     int estToutEspaces = 1;
@@ -275,7 +265,7 @@ int executerCommande(char * commande)
     char ** cmd = extraireMots(commande," ");
     if (strcmp(cmd[0]," ") == 0)
     {
-        return 0;
+        return retCmd();
     }
     else{
   

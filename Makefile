@@ -1,11 +1,11 @@
-jsh: jsh.o bibv2.o
-	gcc -o jsh jsh.o bibv2.o -lreadline
+jsh: jsh.o bib_jsh.o
+	gcc -o jsh jsh.o bib_jsh.o -lreadline
 
 jsh.o: jsh.c
 	gcc -c jsh.c -o jsh.o -lreadline
 
-bibv2.o: bibv2.c
-	gcc -c bibv2.c -o bibv2.o
+bib_jsh.o: bib_jsh.c
+	gcc -c bib_jsh.c -o bib_jsh.o
 
 clean:
 	rm -f jsh exit *.o
