@@ -3,13 +3,12 @@
 #define BIB_JSH_H
 
 
-extern char* currentDir1;
-extern char* oldpath;
+extern char* currentDir1; // stock le rep courant
+extern char* oldpath; // stock l'ancien rep courant
 
 //définition de la structure du Prompt
 struct Prompt { 
     int ret;  //pour stocker la valeur de retour
-    char* oldPath;  //pour stocker le chemin du dernier rep du travail
 };
 
 extern struct Prompt jsh;  //déclaration d'une variable externe du shell jsh 
