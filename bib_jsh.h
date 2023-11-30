@@ -3,6 +3,9 @@
 #define BIB_JSH_H
 
 
+extern char* currentDir1;
+extern char* oldpath;
+
 //définition de la structure du Prompt
 struct Prompt { 
     int ret;  //pour stocker la valeur de retour
@@ -10,6 +13,7 @@ struct Prompt {
 };
 
 extern struct Prompt jsh;  //déclaration d'une variable externe du shell jsh 
+
 
 char *pwd();
 int exitAvecArgument (int n);

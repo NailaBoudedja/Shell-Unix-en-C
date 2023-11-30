@@ -27,19 +27,21 @@
 //définition du nombre maximum des arguments d'une commande 
 #define MAX_ARGS 20
 
+char * currentDir1 = NULL;
+char * oldpath = NULL;
+
 struct Prompt jsh;    //déclaration du shell jsh
 
 
 //fonction qui renvoie le chemin du rep courrant
 char *pwd() {
-    char *rep = (char *)malloc(PATH_MAX); //allocation d'espace memeoire pour stocker le chemin du répertoire courant
-    if (getcwd(rep, PATH_MAX) == NULL)   //récupérer le répertoire courant
-    {
-        perror("erreur lorsq de réccuperation du chemin courrant");
-        free(rep);
+
+    if (getcwd(currentDir1, PATH_MAX) == NULL) {
+        perror("erreur lors de la récupération du chemin courant");
         exit(1);
-    } else
-        return rep;
+    } else {
+        return currentDir1;
+    }
 }
 
 
@@ -58,6 +60,7 @@ int exitSansArgument()
 }
 int exitCmd(char * val)
 {
+
    if(val != NULL)
    {
     return exitAvecArgument (atoi(val)); 
@@ -95,20 +98,28 @@ int cd( char * ref)
             fprintf(stderr, "Impossible de récupérer la variable d'environnement $HOME.\n");
             return 1;
         }
-        jsh.oldPath = pwd();
+        //jsh.oldPath = pwd();
+
+        oldpath = strdup(currentDir1);
+
+
+        //printf("danc cd mon oldPath %s\n",oldpath);
         if (chdir(home_dir) != 0) {
             // free(home_dir);
             perror("chdir home");
             return 1;
         }
+        pwd();
+        //printf("currentdir1 apres affcetation %s\n",currentDir1);
     }
     else{
         //cd vers pere
         if (strcmp(ref, "-") == 0) {
-            const char *prev_dir = jsh.oldPath;
+            //printf("oldpath que je devai affecter %s\n",oldpath);
+            const char *prev_dir = oldpath;
             if (prev_dir == NULL) {
                // free(prev_dir);
-                fprintf(stderr, "Impossible de récupérer la variable d'environnement $OLDPWD.\n");
+                //fprintf(stderr, "Impossible de récupérer la variable d'environnement $OLDPWD.\n");
                 return 1;
             }
 
@@ -117,16 +128,24 @@ int cd( char * ref)
                 perror("chdir old path");
                 return 1;
             }
+            currentDir1 = pwd();
         }
         else{
             //cd ref
             if(isReferenceValid(ref) == 0)
             {
-            jsh.oldPath = pwd();
+            //printf("danc cd mon currentDir1 %s\n",currentDir1);
+            oldpath = strdup(currentDir1);
+           
+            //printf("danc cd mon oldPath %s\n",oldpath);
             if (chdir(ref) != 0) {
                 perror("chdir");
                 return 1;
             }
+            pwd();
+            //printf("currentdir1 apres affcetation %s\n",currentDir1);
+            //currentDir1 = pwd();
+           
             }
             else{
                 //ref non valide
@@ -137,7 +156,7 @@ int cd( char * ref)
     }
 
 
-
+   //printf("mon oldpath avec fin cd %s\n",oldpath);
   return 0;
 
 
@@ -199,7 +218,7 @@ char *afficherJsh() {
     // Allouer de la mémoire pour le résultat et le retourner
     char *aretourner = strdup(result);
    
-    free(currentDir);  // Libérer la mémoire allouée par pwd()
+    //free(currentDir);  // Libérer la mémoire allouée par pwd()
     return aretourner;
 }
 
@@ -218,7 +237,7 @@ char **extraireMots(char *phrase, char *delimiteur) {
     if (estToutEspaces) {
         char **mots = (char **)malloc(2 * sizeof(char *));
         if (mots == NULL) {
-            free(mots);
+            //  free(mots);
             perror("Erreur d'allocation de mémoire");
             exit(EXIT_FAILURE);
         }
@@ -268,6 +287,7 @@ char **extraireMots(char *phrase, char *delimiteur) {
 
     return mots;
 }
+/*
 
 int executerCommande(char * commande)
 {
@@ -285,6 +305,7 @@ int executerCommande(char * commande)
         //
         //printf("dans exit \n");
         return exitCmd(cmd[1]);
+
     }
     else if(strcmp(cmd[0], "cd") == 0){
         //printf("dans cd \n");
@@ -295,13 +316,13 @@ int executerCommande(char * commande)
         char *currentDir = pwd(); //reccuperer le chemin du rep courrant
         if(currentDir == NULL)
         {
-            free(currentDir);
+            //free(currentDir);
             return 1;
         }
         else {
            write(STDOUT_FILENO, currentDir, strlen(currentDir));  //affichage du chemin courrant
            write(STDOUT_FILENO, "\n", 1);
-           free(currentDir);
+           //free(currentDir);
            return 0 ;
         } 
          
@@ -359,17 +380,202 @@ int executerCommande(char * commande)
     
     
  // return 0;
-}
+}  
+*/
 
-int contientQueDesEspaces(const char *input) {
-    while (*input) {
-        if (!isspace((unsigned char)*input)) {
-            // Le caractère actuel n'est pas un espace
-            return 0; // Retourne faux
-        }
-        input++;
+
+
+
+int executerCommande(char * commande)
+{
+    //organiser commande
+    char ** cmd = extraireMots(commande, " ");
+    if (strcmp(cmd[0], " ") == 0)
+    {
+        return retCmd();
     }
-    // Tous les caractères étaient des espaces
-    return 1; // Retourne vrai
+    else
+    {
+        if (strcmp(cmd[0], "exit") == 0) {
+            int result = exitCmd(cmd[1]);
+
+            for (int i = 0; cmd[i] != NULL; i++) {
+                free(cmd[i]);
+            }
+            free(cmd);
+            return result;
+        }
+        else if (strcmp(cmd[0], "cd") == 0) {
+            int result = cd(cmd[1]);
+            for (int i = 0; cmd[i] != NULL; i++) {
+                free(cmd[i]);
+            }
+            free(cmd);
+            return result;
+        }
+        else if (strcmp(cmd[0], "pwd") == 0) {
+            char *currentDir = pwd();
+            if (currentDir == NULL) {
+                // En cas d'erreur
+                for (int i = 0; cmd[i] != NULL; i++) {
+                    free(cmd[i]);
+                }
+                free(cmd);
+                return 1;
+            }
+            else {
+                write(STDOUT_FILENO, currentDir, strlen(currentDir));
+                write(STDOUT_FILENO, "\n", 1);
+                //free(currentDir);
+                for (int i = 0; cmd[i] != NULL; i++) {
+                    free(cmd[i]);
+                }
+                free(cmd);
+                return 0;
+            }
+        }
+        else if (strcmp(cmd[0], "?") == 0) {
+            int old_ret = retCmd();
+            char old_ret_s[5];
+            sprintf(old_ret_s, "%d", old_ret);
+            write(STDOUT_FILENO, old_ret_s, strlen(old_ret_s));
+            write(STDOUT_FILENO, "\n", 1);
+            for (int i = 0; cmd[i] != NULL; i++) {
+                free(cmd[i]);
+            }
+            free(cmd);
+            return 0;
+        }
+        else {
+            //commande externe
+            pid_t pid = fork();
+            if (pid < 0) {
+                perror("fork");
+                exit(EXIT_FAILURE);
+            }
+            else if (pid == 0) {
+                execvp(cmd[0], cmd);
+                perror(cmd[0]);
+                exit(EXIT_FAILURE);
+            }
+            else {
+
+                for (int i = 0; cmd[i] != NULL; i++) {
+                    free(cmd[i]);
+                }
+                free(cmd);
+
+                int status;
+                waitpid(pid, &status, 0);
+                if (WIFEXITED(status)) {
+                    return WEXITSTATUS(status);
+                } else {
+                    return 1;
+                }
+            }
+        }
+    }
+    
+    return 1; 
 }
 
+
+
+
+/*
+
+
+int executerCommande(char * commande)
+{
+    // Organiser la commande
+    char ** cmd = extraireMots(commande, " ");
+    if (strcmp(cmd[0], " ") == 0)
+    {
+        return retCmd();
+    }
+    else
+    {
+        if (strcmp(cmd[0], "exit") == 0) {
+            int result = exitCmd(cmd[1]);
+
+            for (int i = 0; cmd[i] != NULL; i++) {
+                free(cmd[i]);
+            }
+            free(cmd);
+            return result;
+        }
+        else if (strcmp(cmd[0], "cd") == 0) {
+            int result = cd(cmd[1]);
+            for (int i = 0; cmd[i] != NULL; i++) {
+                free(cmd[i]);
+            }
+            free(cmd);
+            return result;
+        }
+        else if (strcmp(cmd[0], "pwd") == 0) {
+            char *currentDir = pwd();
+            if (currentDir == NULL) {
+                // En cas d'erreur
+                for (int i = 0; cmd[i] != NULL; i++) {
+                    free(cmd[i]);
+                }
+                free(cmd);
+                return 1;
+            }
+            else {
+                write(STDOUT_FILENO, currentDir, strlen(currentDir));
+                write(STDOUT_FILENO, "\n", 1);
+                // Libérer la mémoire allouée pour currentDir
+                free(currentDir);
+                
+                for (int i = 0; cmd[i] != NULL; i++) {
+                    free(cmd[i]);
+                }
+                free(cmd);
+                return 0;
+            }
+        }
+        else if (strcmp(cmd[0], "?") == 0) {
+            int old_ret = retCmd();
+            char old_ret_s[5];
+            sprintf(old_ret_s, "%d", old_ret);
+            write(STDOUT_FILENO, old_ret_s, strlen(old_ret_s));
+            write(STDOUT_FILENO, "\n", 1);
+            for (int i = 0; cmd[i] != NULL; i++) {
+                free(cmd[i]);
+            }
+            free(cmd);
+            return 0;
+        }
+        else {
+            // Commande externe
+            pid_t pid = fork();
+            if (pid < 0) {
+                perror("fork");
+                exit(EXIT_FAILURE);
+            }
+            else if (pid == 0) {
+                execvp(cmd[0], cmd);
+                perror(cmd[0]);
+                exit(EXIT_FAILURE);
+            }
+            else {
+                for (int i = 0; cmd[i] != NULL; i++) {
+                    free(cmd[i]);
+                }
+                free(cmd);
+
+                int status;
+                waitpid(pid, &status, 0);
+                if (WIFEXITED(status)) {
+                    return WEXITSTATUS(status);
+                } else {
+                    return 1;
+                }
+            }
+        }
+    }
+    
+    return 1; 
+}
+*/
