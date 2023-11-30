@@ -12,7 +12,7 @@ int main() {
 
     currentDir1 = (char *)malloc(PATH_MAX);
     currentDir1= pwd();
-    oldpath = currentDir1;
+    //oldpath = currentDir1;
     jsh.oldPath= currentDir1 ;  //initialiser le chemin du rep courrant
     char* ligne;
 
@@ -44,4 +44,3 @@ int main() {
     free(input);
     return 0;
 }
-

@@ -99,7 +99,7 @@ int cd( char * ref)
             return 1;
         }
         //jsh.oldPath = pwd();
-
+        free(oldpath);
         oldpath = strdup(currentDir1);
 
 
@@ -135,6 +135,7 @@ int cd( char * ref)
             if(isReferenceValid(ref) == 0)
             {
             //printf("danc cd mon currentDir1 %s\n",currentDir1);
+            free(oldpath);
             oldpath = strdup(currentDir1);
            
             //printf("danc cd mon oldPath %s\n",oldpath);
