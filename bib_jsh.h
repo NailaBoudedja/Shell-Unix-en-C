@@ -1,5 +1,7 @@
+// jsh_bib.h
 #ifndef BIB_JSH_H
 #define BIB_JSH_H
+
 
 //définition de la structure du Prompt
 struct Prompt { 

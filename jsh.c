@@ -31,3 +31,4 @@ int main() {
     free(jsh.oldPath);  //libération de la memoire allouée pour oldpath
     return 0;
 }
+
