@@ -6,6 +6,7 @@
 extern char* currentDir1; // stock le rep courant
 extern char* oldpath; // stock l'ancien rep courant
 
+
 //définition de la structure du Prompt
 struct Prompt { 
     int ret;  //pour stocker la valeur de retour
@@ -25,5 +26,7 @@ char *tronkString(const char *str, int size);
 char *afficherJsh();
 char **extraireMots(char *phrase, char *delimiteur);
 int executerCommande(char * commande);
+int executerRedirection(char *commande);
+
 
 #endif

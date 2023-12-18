@@ -28,8 +28,9 @@ int main() {
         else if(input && *input) 
         {   
               add_history(input);  //ajout de la commande à l'historique du shell
-              jsh.ret = executerCommande(input); //execution de la commande et stocker sa val de ret     
-        }
+              //jsh.ret = executerCommande(input); //execution de la commande et stocker sa val de ret   
+               jsh.ret = executerRedirection(input) ; 
+       }
         
         free(input);   //libération de la memoire allouée pours inzput
     }

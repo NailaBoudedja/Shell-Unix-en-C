@@ -276,163 +276,6 @@ char **extraireMots(char *phrase, char *delimiteur) {
 
     return mots;
 }
-
-
-// penser à faire un nouveau fichier pour les redirections 
-// int saved_stdin; // Pour sauvegarder le descripteur de fichier de l'entrée standard
-//int new_stdin;   // Pour le nouveau descripteur de fichier après la redirection
-// penser à gerer si la redirection n'est pas gerer genre erreur
-int redirEntre(char *cmd, char *file){
-    // le pere cree un fils 
-    pid_t pid = fork();
-    if (pid < 0){
-        perror("erreur fork");
-        exit(EXIT_FAILURE);
-    }
-    else if (pid ==0){
-        // on est dans le fil qui execute cmd
-        int fd = open(file,O_RDONLY);
-        if (fd==-1){
-            perror("erreur open");
-            exit(EXIT_FAILURE);
-        }
-        // on redirige l'entrée standard vers le fichier
-        dup2(fd, STDIN_FILENO);
-        close(fd);
-        // ensuite on execute la cmd
-        execlp(cmd,cmd,(char *)NULL);
-        perror("exec error");
-        exit(EXIT_FAILURE);
-    }else{
-        // on est dans le pere. On attend que le fil se termine
-      int status;
-        waitpid(pid, &status, 0);
-        if (WIFEXITED(status)) {
-            return WEXITSTATUS(status);
-        } else {
-            return 1; // Ou une autre valeur d'erreur
-        }
-    }
-}
-int redirSortie (char *cmd , char * file, int r){ // r va me permettre de differencier les types de redirections
-    pid_t pid = fotk();
-    if(pid < 0){
-        perror("erreur fork");
-        exit(EXIT_FAILURE);  
-    }
-    else if(pid==0){
-        int fd ;
-        if(r == REDIR_WITH_TRUNC){ // >|
-            fd = open(file,O_WRONLY | O_CREAT | O_TRUNC,0644);
-        }else if (r == REDIR_APPEND){
-            fd = open(file,O_WRONLY | O_CREAT | O_APPEND,0644);
-        }else{
-            fd = open(file,O_WRONLY | O_CREAT |O_EXCL,0644);
-        }
-        if(fd == -1){
-            perror("erreur open");
-            exit(EXIT_FAILURE);
-        }
-    // on redirige la sortie standard vers le fichier
-     dup2(fd, STDOUT_FILENO);
-     close(fd);
-     // ensuite on execute la cmd  
-     execlp(cmd,cmd,(char *)NULL);
-    perror("exec error");
-    exit(EXIT_FAILURE);
-    }else{
-     // on est dans le pere. On attend que le fil se termine
-         int status;
-            waitpid(pid, &status, 0);
-            if (WIFEXITED(status)) {
-                return WEXITSTATUS(status);
-            } else {
-                return 1; // Ou une autre valeur d'erreur
-            }
-    }
-}
-int redirErreur(char *cmd , char *file, int r){
-    pid_t pid = fotk();
-    if(pid < 0){
-        perror("erreur fork");
-        exit(EXIT_FAILURE);  
-    }
-    else if(pid==0){
-        int fd ;
-        if(r == REDIR_WITH_TRUNC){ // 2>|
-            fd = open(file,O_WRONLY | O_CREAT | O_TRUNC,0644);
-        }else if (r == REDIR_APPEND){ // 2>>
-            fd = open(file,O_WRONLY | O_CREAT | O_APPEND,0644);
-        }else{ // 2>
-            fd = open(file,O_WRONLY | O_CREAT |O_EXCL,0644);
-        }
-        if(fd == -1){
-            perror("erreur open");
-            exit(EXIT_FAILURE);
-        }
-    // on redirige la sortie standard vers le fichier
-     dup2(fd, STDERR_FILENO);
-     close(fd);
-     // ensuite on execute la cmd  
-     execlp(cmd,cmd,(char *)NULL);
-    perror("exec error");
-    exit(EXIT_FAILURE);
-    }else{
-     // on est dans le pere. On attend que le fil se termine
-         int status;
-            waitpid(pid, &status, 0);
-            if (WIFEXITED(status)) {
-                return WEXITSTATUS(status);
-            } else {
-                return 1; // Ou une autre valeur d'erreur
-            }
-    }
-}
-
-
-
-
-
-/*int interprete_redirection(char **commande, int nb_args) {
-    / Cette fonction est responsable de gérer les redirections. Elle prend en entrée une commande et son nombre d'arguments,
-    / Cette fonction est chargée d'interpréter une commande qui contient des redirections.
-     Elle prend en entrée une commande sous forme de tableau de chaines de caractères et le nombre
-     d'arguments qu'elle comporte. La fonction renvoie 1 si elle a pu interpréter la commande sans
-    erreurs, et 0 sinon. Si la commande est correctement interprétée, il convient de lancer la
-     nouvelle commande via la fonction system(). 
-   // On suppose que la commande ne contient pas de redirections
-   if (nb_args <= 2) {
-    return 1;
-    }
-    // On récupère le type de redirection : "<" ou ">"
-    char type_de_redirection = commande[1][0];
-    // On vérifie que c'est bien "<" ou ">", et non rien d'autre
-    if ((type_de_redirection != '<') && (type_de_redirection != '>')){
-        printf("%s", "Syntaxe invalide\n");
-        return 0;
-        }
-        // On crée un nom de fichier temporaire pour stocker la sortie de la commande
-        char* tmp_file = mktemp("/tmp/tshell-XXXXXX");
-        // On construit la nouvelle commande en remplaçant la redirection par le nom du fichier temporaire
-        // et on lance cette nouvelle commande
-        sprintf(commande[nb_args - 1], "%c %s", type_de_redirection, tmp_file);
-        system(commande[0]);
-        // On ouvre le fichier temporaire dans lequel on va écrire la sortie standard
-        FILE* out_stream = fopen(tmp_file, "w");
-        // On lit la sortie standard normale et on écrit dedans
-        while (!feof(stdout)) {
-            char buffer[BUFSIZ];
-            fgets(buffer, BUFSIZ, stdout);
-            fputs(buffer, out_stream);
-            }
-            // On ferme le flux et le fichier
-            fclose(out_stream);
-            remove(tmp_file);
-            return 1;
-            }*/
-        
-    
-
 int executerCommande(char * commande)
 {
     //organiser commande
@@ -524,5 +367,147 @@ int executerCommande(char * commande)
     
     return 1; 
 }
+
+
+// penser à faire un nouveau fichier pour les redirections 
+// int saved_stdin; // Pour sauvegarder le descripteur de fichier de l'entrée standard
+//int new_stdin;   // Pour le nouveau descripteur de fichier après la redirection
+// penser à gerer si la redirection n'est pas gerer genre erreur
+int redirEntre(char *cmd, char *file){
+    // le pere cree un fils 
+    pid_t pid = fork();
+    if (pid < 0){
+        perror("erreur fork");
+        exit(EXIT_FAILURE);
+    }
+    else if (pid ==0){
+        // on est dans le fil qui execute cmd
+        int fd = open(file,O_RDONLY);
+        if (fd==-1){
+            perror("erreur open");
+            exit(EXIT_FAILURE);
+        }
+        // on redirige l'entrée standard vers le fichier
+        dup2(fd, STDIN_FILENO);
+        close(fd);
+        // ensuite on execute la cmd
+        execlp(cmd,cmd,(char *)NULL);
+        perror("exec error");
+        exit(EXIT_FAILURE);
+    }else{
+        // on est dans le pere. On attend que le fil se termine
+      int status;
+        wait(&status);
+        if (WIFEXITED(status)) {
+            return 0;
+        } else {
+            return 1; // Ou une autre valeur d'erreur
+        }
+    }
+}
+int redirSortie (char *cmd , char * file, int r){ // r va me permettre de differencier les types de redirections
+    printf("dans redure sortieeeee \n");
+    pid_t pid = fork();
+    if(pid < 0){
+        perror("erreur fork");
+        exit(EXIT_FAILURE);  
+    }
+    else if(pid==0){
+        int fd ;
+        if(r == REDIR_WITH_TRUNC){ // >|
+            fd = open(file,O_WRONLY | O_CREAT | O_TRUNC,0644);
+        }else if (r == REDIR_APPEND){ // >>
+            fd = open(file,O_WRONLY | O_CREAT | O_APPEND,0644);
+        }else{ // >
+            fd = open(file,O_WRONLY | O_CREAT |O_EXCL,0644);
+        }
+        if(fd == -1){
+            perror("erreur open");
+            exit(EXIT_FAILURE);
+        }
+    // on redirige la sortie standard vers le fichier
+     dup2(fd, STDOUT_FILENO);
+     close(fd);
+     // ensuite on execute la cmd  
+     execlp(cmd,cmd,(char *)NULL);
+    perror("exec error");
+    exit(EXIT_FAILURE);
+    }else{
+     // on est dans le pere. On attend que le fil se termine
+         int status;
+            wait(&status);
+        if (WIFEXITED(status)) {
+            return 0;
+        } else {
+            return 1; // Ou une autre valeur d'erreur
+        }
+    }
+}
+int redirErreur(char *cmd , char *file, int r){
+    pid_t pid = fork();
+    if(pid < 0){
+        perror("erreur fork");
+        exit(EXIT_FAILURE);  
+    }
+    else if(pid==0){
+        int fd ;
+        if(r == REDIR_WITH_TRUNC){ // 2>|
+            fd = open(file,O_WRONLY | O_CREAT | O_TRUNC,0644);
+        }else if (r == REDIR_APPEND){ // 2>>
+            fd = open(file,O_WRONLY | O_CREAT | O_APPEND,0644);
+        }else{ // 2>
+            fd = open(file,O_WRONLY | O_CREAT |O_EXCL,0644);
+        }
+        if(fd == -1){
+            perror("erreur open");
+            exit(EXIT_FAILURE);
+        }
+    // on redirige la sortie standard vers le fichier
+     dup2(fd, STDERR_FILENO);
+     close(fd);
+     // ensuite on execute la cmd  
+     execlp(cmd,cmd,(char *)NULL);
+    perror("exec error");
+    exit(EXIT_FAILURE);
+    }else{
+     // on est dans le pere. On attend que le fil se termine
+         int status;
+             wait(&status);
+        if (WIFEXITED(status)) {
+            return 0;
+        } else {
+            return 1; // Ou une autre valeur d'erreur
+        }
+    }
+}
+
+int executerRedirection(char *commande){
+    char **mots = extraireMots(commande, " ");
+    printf(" mots contient  %s",mots);
+    char *cmd = strdup(mots[0]);
+     printf(" cmd contient  %s",cmd);
+    char *typeRedirection = strdup(mots[1]);
+    printf(" type redirection contient  %s",typeRedirection);
+    char *file = strdup(mots[2]);
+
+    if (strcmp(typeRedirection, "<") == 0) {
+        return redirEntre(cmd, file);
+    } else if (strcmp(typeRedirection, ">") == 0) {
+        return redirSortie(cmd, file, SIMPLE_REDIR);
+    } else if (strcmp(typeRedirection, ">>") == 0) {
+        return redirSortie(cmd, file, REDIR_APPEND);
+    } else if (strcmp(typeRedirection, ">|") == 0) {
+        return redirSortie(cmd, file, REDIR_WITH_TRUNC);
+    } else if (strcmp(typeRedirection, "2>") == 0) {
+        return redirErreur(cmd, file, SIMPLE_REDIR);
+    } else if (strcmp(typeRedirection, "2>>") == 0) {
+        return redirErreur(cmd, file, REDIR_APPEND);
+    }else if (strcmp(typeRedirection, "2>|") == 0) {
+        return redirErreur(cmd, file, REDIR_WITH_TRUNC);    
+    } else {
+        fprintf(stderr, "Type de redirection non reconnu : %s\n", typeRedirection);
+        return 1;
+    }
+} 
 
 
