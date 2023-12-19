@@ -1,0 +1,25 @@
+char **extraireMots2(char *ligne, char *delim) {
+    char **mots = malloc(MAX_ARGS * sizeof(char *));
+    char *mot;
+    int i = 0;
+
+    mot = strtok(ligne, delim);
+    while (mot != NULL) {
+        // Inclure les caractères de redirection comme des mots distincts
+        if (strlen(mot) > 0 && (strcmp(mot, "<") == 0 || strcmp(mot, ">") == 0 ||
+                                strcmp(mot, ">>") == 0 || strcmp(mot, ">|") == 0 ||
+                                strcmp(mot, "2>") == 0 || strcmp(mot, "2>>") == 0 ||
+                                strcmp(mot, "2>|") == 0)) {
+            mots[i] = strdup(mot);
+            i++;
+        } else if (strlen(mot) > 0) {
+            // Ignorer les espaces et inclure les autres mots
+            mots[i] = strdup(mot);
+            i++;
+        }
+        mot = strtok(NULL, delim);
+    }
+    mots[i] = NULL; // Marquer la fin du tableau avec NULL
+
+    return mots;
+}

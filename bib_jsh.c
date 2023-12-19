@@ -31,6 +31,7 @@
 #define SIMPLE_REDIR 0
 #define REDIR_WITH_TRUNC 1
 #define REDIR_APPEND 2 
+#define MAX_CMD_LEN 256
 
 char * currentDir1 = NULL;
 char * oldpath = NULL;
@@ -373,7 +374,70 @@ int executerCommande(char * commande)
 // int saved_stdin; // Pour sauvegarder le descripteur de fichier de l'entrée standard
 //int new_stdin;   // Pour le nouveau descripteur de fichier après la redirection
 // penser à gerer si la redirection n'est pas gerer genre erreur
+// char **extraireMots2(char *phrase, char *delimiteurs) {
+//     char **mots = (char **)malloc(MAX_ARGS * sizeof(char *));
+//     if (mots == NULL) {
+//         perror("Erreur d'allocation de mémoire");
+//         exit(EXIT_FAILURE);
+//     }
+
+//     int index = 0;
+//     char *mot = phrase;
+
+//     while (*mot != '\0' && index < MAX_ARGS) {
+//         // Si le caractère actuel est un délimiteur, ajoutez-le comme un mot distinct
+//         if (strchr(delimiteurs, *mot) != NULL) {
+//             mots[index++] = strndup(mot, 1);
+//             mot++;
+//         } else {
+//             // Sinon, trouvez la fin du mot actuel et ajoutez-le au tableau
+//             char *finMot = mot;
+//             while (*finMot != '\0' && strchr(delimiteurs, *finMot) == NULL) {
+//                 finMot++;
+//             }
+//             mots[index++] = strndup(mot, finMot - mot);
+//             mot = finMot;
+//         }
+//     }
+
+//     mots[index] = NULL;
+
+//     return mots;
+// }
+char **extraireMots2(char *ligne) {
+    char **mots = malloc(MAX_ARGS * sizeof(char *));
+    char *mot;
+    int i = 0;
+
+    mot = strtok(ligne, " ");
+    while (mot != NULL) {
+        // Ignorer les espaces
+        if (strlen(mot) > 0) {
+            // Inclure <, >, 2>, 2>>, 2>| comme des mots distincts
+            if (strcmp(mot, "<") == 0 || strcmp(mot, ">") == 0 || strcmp(mot, "2>") == 0 || strcmp(mot, "2>>") == 0 || strcmp(mot, "2>|") == 0) {
+                mots[i] = strdup(mot);
+                i++;
+            } else {
+                // Inclure le mot tel quel
+                mots[i] = strdup(mot);
+                i++;
+            }
+        }
+        mot = strtok(NULL, " ");
+    }
+    mots[i] = NULL; // Marquer la fin du tableau avec NULL
+
+    return mots;
+}
+
+
+
+
 int redirEntre(char *cmd, char *file){
+    // Diviser la commande en son nom de programme et ses arguments
+
+    char **mots = extraireMots2(cmd);
+
     // le pere cree un fils 
     pid_t pid = fork();
     if (pid < 0){
@@ -382,6 +446,7 @@ int redirEntre(char *cmd, char *file){
     }
     else if (pid ==0){
         // on est dans le fil qui execute cmd
+
         int fd = open(file,O_RDONLY);
         if (fd==-1){
             perror("erreur open");
@@ -391,7 +456,7 @@ int redirEntre(char *cmd, char *file){
         dup2(fd, STDIN_FILENO);
         close(fd);
         // ensuite on execute la cmd
-        execlp(cmd,cmd,(char *)NULL);
+        execvp(mots[0], mots); // Utiliser execvp au lieu de execlp
         perror("exec error");
         exit(EXIT_FAILURE);
     }else{
@@ -405,8 +470,10 @@ int redirEntre(char *cmd, char *file){
         }
     }
 }
-int redirSortie (char *cmd , char * file, int r){ // r va me permettre de differencier les types de redirections
-    printf("dans redure sortieeeee \n");
+int redirSortie (char *cmd , char * file, int r) {
+    // Diviser la commande en son nom de programme et ses arguments
+    char **mots = extraireMots2(cmd);
+
     pid_t pid = fork();
     if(pid < 0){
         perror("erreur fork");
@@ -429,7 +496,8 @@ int redirSortie (char *cmd , char * file, int r){ // r va me permettre de differ
      dup2(fd, STDOUT_FILENO);
      close(fd);
      // ensuite on execute la cmd  
-     execlp(cmd,cmd,(char *)NULL);
+    //debeugprintf("Executing: %s < %s\n", cmd, file);
+     execvp(mots[0], mots); // Utiliser execvp au lieu de execlp
     perror("exec error");
     exit(EXIT_FAILURE);
     }else{
@@ -444,6 +512,9 @@ int redirSortie (char *cmd , char * file, int r){ // r va me permettre de differ
     }
 }
 int redirErreur(char *cmd , char *file, int r){
+    // Diviser la commande en son nom de programme et ses arguments
+    char **mots = extraireMots2(cmd);
+
     pid_t pid = fork();
     if(pid < 0){
         perror("erreur fork");
@@ -466,7 +537,7 @@ int redirErreur(char *cmd , char *file, int r){
      dup2(fd, STDERR_FILENO);
      close(fd);
      // ensuite on execute la cmd  
-     execlp(cmd,cmd,(char *)NULL);
+     execvp(mots[0], mots); // Utiliser execvp au lieu de execlp
     perror("exec error");
     exit(EXIT_FAILURE);
     }else{
@@ -481,33 +552,100 @@ int redirErreur(char *cmd , char *file, int r){
     }
 }
 
-int executerRedirection(char *commande){
-    char **mots = extraireMots(commande, " ");
-    printf(" mots contient  %s",mots);
-    char *cmd = strdup(mots[0]);
-     printf(" cmd contient  %s",cmd);
-    char *typeRedirection = strdup(mots[1]);
-    printf(" type redirection contient  %s",typeRedirection);
-    char *file = strdup(mots[2]);
 
-    if (strcmp(typeRedirection, "<") == 0) {
-        return redirEntre(cmd, file);
-    } else if (strcmp(typeRedirection, ">") == 0) {
-        return redirSortie(cmd, file, SIMPLE_REDIR);
-    } else if (strcmp(typeRedirection, ">>") == 0) {
-        return redirSortie(cmd, file, REDIR_APPEND);
-    } else if (strcmp(typeRedirection, ">|") == 0) {
-        return redirSortie(cmd, file, REDIR_WITH_TRUNC);
-    } else if (strcmp(typeRedirection, "2>") == 0) {
-        return redirErreur(cmd, file, SIMPLE_REDIR);
-    } else if (strcmp(typeRedirection, "2>>") == 0) {
-        return redirErreur(cmd, file, REDIR_APPEND);
-    }else if (strcmp(typeRedirection, "2>|") == 0) {
-        return redirErreur(cmd, file, REDIR_WITH_TRUNC);    
-    } else {
-        fprintf(stderr, "Type de redirection non reconnu : %s\n", typeRedirection);
+int executerRedirection(char *commande) {
+    char **mots = extraireMots2(commande);
+    int indexRedirection = 0;
+
+    // Trouver l'index du caractère de redirection
+    while (mots[indexRedirection] != NULL) {
+        if (strcmp(mots[indexRedirection], ">") == 0 || strcmp(mots[indexRedirection], ">>") == 0 ||
+            strcmp(mots[indexRedirection], "<") == 0 || strcmp(mots[indexRedirection], "2>") == 0 ||
+            strcmp(mots[indexRedirection], "2>>") == 0 || strcmp(mots[indexRedirection], "2>|") == 0) {
+            break;
+        }
+        indexRedirection++;
+    }
+
+    // Si le caractère de redirection n'est pas trouvé, afficher une erreur
+    if (mots[indexRedirection] == NULL) {
+        fprintf(stderr, "Aucun caractère de redirection trouvé\n");
         return 1;
     }
-} 
+
+    // Construire la commande avec ses options
+    char cmd[MAX_CMD_LEN] = "";
+    for (int i = 0; i < indexRedirection; i++) {
+        strcat(cmd, mots[i]);
+        strcat(cmd, " ");
+    }
+
+    // Exécuter la redirection en fonction du type de redirection
+    if (strcmp(mots[indexRedirection], "<") == 0) {
+        return redirEntre(cmd, mots[indexRedirection + 1]);
+    } else if (strcmp(mots[indexRedirection], ">") == 0) {
+        return redirSortie(cmd, mots[indexRedirection + 1], SIMPLE_REDIR);
+    } else if (strcmp(mots[indexRedirection], ">>") == 0) {
+        return redirSortie(cmd, mots[indexRedirection + 1], REDIR_APPEND);
+    } else if (strcmp(mots[indexRedirection], ">|") == 0) {
+        return redirSortie(cmd, mots[indexRedirection + 1], REDIR_WITH_TRUNC);
+    } else if (strcmp(mots[indexRedirection], "2>") == 0) {
+        return redirErreur(cmd, mots[indexRedirection + 1], SIMPLE_REDIR);
+    } else if (strcmp(mots[indexRedirection], "2>>") == 0 || strcmp(mots[indexRedirection], "2>|") == 0) {
+        return redirErreur(cmd, mots[indexRedirection + 1], REDIR_APPEND);
+    } else {
+        fprintf(stderr, "Type de redirection non reconnu : %s\n", mots[indexRedirection]);
+        return 1;
+    }
+}
+
+// int executerRedirection(char *commande){
+//     char **mots = extraireMots(commande, " ");
+//     printf(" mots contient  %s",mots);
+//     char *cmd = strdup(mots[0]);
+//      printf(" cmd contient  %s",cmd);
+//     char *typeRedirection = strdup(mots[1]);
+//     printf(" type redirection contient  %s",typeRedirection);
+//     char *file = strdup(mots[2]);
+
+//     if (strcmp(typeRedirection, "<") == 0) {
+//         return redirEntre(cmd, file);
+//     } else if (strcmp(typeRedirection, ">") == 0) {
+//         return redirSortie(cmd, file, SIMPLE_REDIR);
+//     } else if (strcmp(typeRedirection, ">>") == 0) {
+//         return redirSortie(cmd, file, REDIR_APPEND);
+//     } else if (strcmp(typeRedirection, ">|") == 0) {
+//         return redirSortie(cmd, file, REDIR_WITH_TRUNC);
+//     } else if (strcmp(typeRedirection, "2>") == 0) {
+//         return redirErreur(cmd, file, SIMPLE_REDIR);
+//     } else if (strcmp(typeRedirection, "2>>") == 0) {
+//         return redirErreur(cmd, file, REDIR_APPEND);
+//     }else if (strcmp(typeRedirection, "2>|") == 0) {
+//         return redirErreur(cmd, file, REDIR_WITH_TRUNC);    
+//     } else {
+//         fprintf(stderr, "Type de redirection non reconnu : %s\n", typeRedirection);
+//         return 1;
+//     }
+//}
+// nouveelle fonction extraire mots qui prend en compte le cas des fonctions avec plusieurs 
+// char **extraireMots2(char *phrase, char *delimiteurs) {
+//     char **mots = (char **)malloc(MAX_ARGS * sizeof(char *));
+//     if (mots == NULL) {
+//         perror("Erreur d'allocation de mémoire");
+//         exit(EXIT_FAILURE);
+//     }
+
+//     char *mot = strtok(phrase, delimiteurs);
+//     int index = 0;
+
+//     while (mot != NULL && index < MAX_ARGS) {
+//         mots[index++] = strdup(mot);
+//         mot = strtok(NULL, delimiteurs);
+//     }
+
+//     mots[index] = NULL;
+
+//     return mots;
+// }
 
 
