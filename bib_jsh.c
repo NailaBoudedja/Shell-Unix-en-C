@@ -27,11 +27,6 @@
 #define MAX_PROMPT_SIZE 30 
 //définition du nombre maximum des arguments d'une commande 
 #define MAX_ARGS 20
-//constante qui me permette de gerer mes redirections 
-#define SIMPLE_REDIR 0
-#define REDIR_WITH_TRUNC 1
-#define REDIR_APPEND 2 
-#define MAX_CMD_LEN 256
 
 char * currentDir1 = NULL;
 char * oldpath = NULL;
@@ -277,6 +272,9 @@ char **extraireMots(char *phrase, char *delimiteur) {
 
     return mots;
 }
+
+
+
 int executerCommande(char * commande)
 {
     //organiser commande
@@ -370,282 +368,120 @@ int executerCommande(char * commande)
 }
 
 
-// penser à faire un nouveau fichier pour les redirections 
-// int saved_stdin; // Pour sauvegarder le descripteur de fichier de l'entrée standard
-//int new_stdin;   // Pour le nouveau descripteur de fichier après la redirection
-// penser à gerer si la redirection n'est pas gerer genre erreur
-// char **extraireMots2(char *phrase, char *delimiteurs) {
-//     char **mots = (char **)malloc(MAX_ARGS * sizeof(char *));
-//     if (mots == NULL) {
-//         perror("Erreur d'allocation de mémoire");
-//         exit(EXIT_FAILURE);
-//     }
+ // Rediriger la sortie standard vers le fichier
+       // int save_stdout = dup(STDOUT_FILENO);
+       // dup2(fd, STDOUT_FILENO);
 
-//     int index = 0;
-//     char *mot = phrase;
+        // Exécution de la commande avec redirection
+        //int ret_redir = executerCommande(cmd);
 
-//     while (*mot != '\0' && index < MAX_ARGS) {
-//         // Si le caractère actuel est un délimiteur, ajoutez-le comme un mot distinct
-//         if (strchr(delimiteurs, *mot) != NULL) {
-//             mots[index++] = strndup(mot, 1);
-//             mot++;
-//         } else {
-//             // Sinon, trouvez la fin du mot actuel et ajoutez-le au tableau
-//             char *finMot = mot;
-//             while (*finMot != '\0' && strchr(delimiteurs, *finMot) == NULL) {
-//                 finMot++;
-//             }
-//             mots[index++] = strndup(mot, finMot - mot);
-//             mot = finMot;
-//         }
-//     }
+        // Restaurer la sortie standard
+       // dup2(save_stdout, STDOUT_FILENO);
 
-//     mots[index] = NULL;
+        // Fermer le fichier
+      //  close(fd); est ce important à gerer ?
+int executerCommandeAvecRedirection(char * commande) {
+    // Extraire les mots de la commande
+    char ** mots = extraireMots(commande, " ");
 
-//     return mots;
-// }
-char **extraireMots2(char *ligne) {
-    char **mots = malloc(MAX_ARGS * sizeof(char *));
-    char *mot;
-    int i = 0;
-
-    mot = strtok(ligne, " ");
-    while (mot != NULL) {
-        // Ignorer les espaces
-        if (strlen(mot) > 0) {
-            // Inclure <, >, 2>, 2>>, 2>| comme des mots distincts
-            if (strcmp(mot, "<") == 0 || strcmp(mot, ">") == 0 || strcmp(mot, "2>") == 0 || strcmp(mot, "2>>") == 0 || strcmp(mot, "2>|") == 0) {
-                mots[i] = strdup(mot);
-                i++;
-            } else {
-                // Inclure le mot tel quel
-                mots[i] = strdup(mot);
-                i++;
-            }
-        }
-        mot = strtok(NULL, " ");
-    }
-    mots[i] = NULL; // Marquer la fin du tableau avec NULL
-
-    return mots;
-}
-
-
-
-
-int redirEntre(char *cmd, char *file){
-    // Diviser la commande en son nom de programme et ses arguments
-
-    char **mots = extraireMots2(cmd);
-
-    // le pere cree un fils 
-    pid_t pid = fork();
-    if (pid < 0){
-        perror("erreur fork");
-        exit(EXIT_FAILURE);
-    }
-    else if (pid ==0){
-        // on est dans le fil qui execute cmd
-
-        int fd = open(file,O_RDONLY);
-        if (fd==-1){
-            perror("erreur open");
-            exit(EXIT_FAILURE);
-        }
-        // on redirige l'entrée standard vers le fichier
-        dup2(fd, STDIN_FILENO);
-        close(fd);
-        // ensuite on execute la cmd
-        execvp(mots[0], mots); // Utiliser execvp au lieu de execlp
-        perror("exec error");
-        exit(EXIT_FAILURE);
-    }else{
-        // on est dans le pere. On attend que le fil se termine
-      int status;
-        wait(&status);
-        if (WIFEXITED(status)) {
-            return 0;
-        } else {
-            return 1; // Ou une autre valeur d'erreur
-        }
-    }
-}
-int redirSortie (char *cmd , char * file, int r) {
-    // Diviser la commande en son nom de programme et ses arguments
-    char **mots = extraireMots2(cmd);
-
-    pid_t pid = fork();
-    if(pid < 0){
-        perror("erreur fork");
-        exit(EXIT_FAILURE);  
-    }
-    else if(pid==0){
-        int fd ;
-        if(r == REDIR_WITH_TRUNC){ // >|
-            fd = open(file,O_WRONLY | O_CREAT | O_TRUNC,0644);
-        }else if (r == REDIR_APPEND){ // >>
-            fd = open(file,O_WRONLY | O_CREAT | O_APPEND,0644);
-        }else{ // >
-            fd = open(file,O_WRONLY | O_CREAT |O_EXCL,0644);
-        }
-        if(fd == -1){
-            perror("erreur open");
-            exit(EXIT_FAILURE);
-        }
-    // on redirige la sortie standard vers le fichier
-     dup2(fd, STDOUT_FILENO);
-     close(fd);
-     // ensuite on execute la cmd  
-    //debeugprintf("Executing: %s < %s\n", cmd, file);
-     execvp(mots[0], mots); // Utiliser execvp au lieu de execlp
-    perror("exec error");
-    exit(EXIT_FAILURE);
-    }else{
-     // on est dans le pere. On attend que le fil se termine
-         int status;
-            wait(&status);
-        if (WIFEXITED(status)) {
-            return 0;
-        } else {
-            return 1; // Ou une autre valeur d'erreur
-        }
-    }
-}
-int redirErreur(char *cmd , char *file, int r){
-    // Diviser la commande en son nom de programme et ses arguments
-    char **mots = extraireMots2(cmd);
-
-    pid_t pid = fork();
-    if(pid < 0){
-        perror("erreur fork");
-        exit(EXIT_FAILURE);  
-    }
-    else if(pid==0){
-        int fd ;
-        if(r == REDIR_WITH_TRUNC){ // 2>|
-            fd = open(file,O_WRONLY | O_CREAT | O_TRUNC,0644);
-        }else if (r == REDIR_APPEND){ // 2>>
-            fd = open(file,O_WRONLY | O_CREAT | O_APPEND,0644);
-        }else{ // 2>
-            fd = open(file,O_WRONLY | O_CREAT |O_EXCL,0644);
-        }
-        if(fd == -1){
-            perror("erreur open");
-            exit(EXIT_FAILURE);
-        }
-    // on redirige la sortie standard vers le fichier
-     dup2(fd, STDERR_FILENO);
-     close(fd);
-     // ensuite on execute la cmd  
-     execvp(mots[0], mots); // Utiliser execvp au lieu de execlp
-    perror("exec error");
-    exit(EXIT_FAILURE);
-    }else{
-     // on est dans le pere. On attend que le fil se termine
-         int status;
-             wait(&status);
-        if (WIFEXITED(status)) {
-            return 0;
-        } else {
-            return 1; // Ou une autre valeur d'erreur
-        }
-    }
-}
-
-
-int executerRedirection(char *commande) {
-    char **mots = extraireMots2(commande);
-    int indexRedirection = 0;
-
-    // Trouver l'index du caractère de redirection
-    while (mots[indexRedirection] != NULL) {
-        if (strcmp(mots[indexRedirection], ">") == 0 || strcmp(mots[indexRedirection], ">>") == 0 ||
-            strcmp(mots[indexRedirection], "<") == 0 || strcmp(mots[indexRedirection], "2>") == 0 ||
-            strcmp(mots[indexRedirection], "2>>") == 0 || strcmp(mots[indexRedirection], "2>|") == 0) {
+    // Parcourir le tableau de mots pour trouver le symbole de redirection
+    int i;
+    for (i = 0; mots[i] != NULL; i++) {
+        if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], "<") == 0 || strcmp(mots[i], ">>") == 0 || strcmp(mots[i], ">|") == 0 || strcmp(mots[i], "2>") == 0 || strcmp(mots[i], "2>>") == 0 || strcmp(mots[i], "2>|") == 0) {
             break;
         }
-        indexRedirection++;
     }
 
-    // Si le caractère de redirection n'est pas trouvé, afficher une erreur
-    if (mots[indexRedirection] == NULL) {
-        fprintf(stderr, "Aucun caractère de redirection trouvé\n");
-        return 1;
+    // Si le symbole de redirection n'est pas trouvé, appeler executerCommande
+    if (mots[i] == NULL) {
+        int result = executerCommande(commande);
+        for (int j = 0; mots[j] != NULL; j++) {
+            free(mots[j]);
+        }
+        free(mots);
+        return result;
     }
 
-    // Construire la commande avec ses options
-    char cmd[MAX_CMD_LEN] = "";
-    for (int i = 0; i < indexRedirection; i++) {
-        strcat(cmd, mots[i]);
+    // Sinon, diviser la commande en deux parties
+    char cmd[1024] = "";
+    for (int j = 0; j < i; j++) {
+        strcat(cmd, mots[j]);
         strcat(cmd, " ");
     }
+    char * fichier = mots[i + 1];
 
-    // Exécuter la redirection en fonction du type de redirection
-    if (strcmp(mots[indexRedirection], "<") == 0) {
-        return redirEntre(cmd, mots[indexRedirection + 1]);
-    } else if (strcmp(mots[indexRedirection], ">") == 0) {
-        return redirSortie(cmd, mots[indexRedirection + 1], SIMPLE_REDIR);
-    } else if (strcmp(mots[indexRedirection], ">>") == 0) {
-        return redirSortie(cmd, mots[indexRedirection + 1], REDIR_APPEND);
-    } else if (strcmp(mots[indexRedirection], ">|") == 0) {
-        return redirSortie(cmd, mots[indexRedirection + 1], REDIR_WITH_TRUNC);
-    } else if (strcmp(mots[indexRedirection], "2>") == 0) {
-        return redirErreur(cmd, mots[indexRedirection + 1], SIMPLE_REDIR);
-    } else if (strcmp(mots[indexRedirection], "2>>") == 0 || strcmp(mots[indexRedirection], "2>|") == 0) {
-        return redirErreur(cmd, mots[indexRedirection + 1], REDIR_APPEND);
-    } else {
-        fprintf(stderr, "Type de redirection non reconnu : %s\n", mots[indexRedirection]);
-        return 1;
-    }
+       // Ouvrir le fichier de redirection
+    int fd;
+if (strcmp(mots[i], "<") == 0) {
+    // Ouvrir le fichier en mode lecture pour la redirection d'entrée
+    fd = open(fichier, O_RDONLY);
+} else if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], "2>") == 0) {
+    // Ouvrir le fichier en mode écriture pour la redirection de sortie
+    fd = open(fichier, O_WRONLY | O_CREAT | O_EXCL, 0644);
+} else if (strcmp(mots[i], ">>") == 0 || strcmp(mots[i], "2>>") == 0) {
+    // Ouvrir le fichier en mode append pour la redirection de sortie
+    fd = open(fichier, O_WRONLY | O_CREAT | O_APPEND, 0644);
+} else if (strcmp(mots[i], ">|") == 0 || strcmp(mots[i], "2>|") == 0) {
+    // Ouvrir le fichier en mode écriture avec troncature pour la redirection de sortie
+    fd = open(fichier, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 }
 
-// int executerRedirection(char *commande){
-//     char **mots = extraireMots(commande, " ");
-//     printf(" mots contient  %s",mots);
-//     char *cmd = strdup(mots[0]);
-//      printf(" cmd contient  %s",cmd);
-//     char *typeRedirection = strdup(mots[1]);
-//     printf(" type redirection contient  %s",typeRedirection);
-//     char *file = strdup(mots[2]);
+if (fd == -1) {
+    perror("open");
+    exit(EXIT_FAILURE);
+}
+// Sauvegarder la sortie standard
+int stdout_backup = dup(STDOUT_FILENO);
+if (stdout_backup == -1) {
+    perror("dup");
+    exit(EXIT_FAILURE);
+}
 
-//     if (strcmp(typeRedirection, "<") == 0) {
-//         return redirEntre(cmd, file);
-//     } else if (strcmp(typeRedirection, ">") == 0) {
-//         return redirSortie(cmd, file, SIMPLE_REDIR);
-//     } else if (strcmp(typeRedirection, ">>") == 0) {
-//         return redirSortie(cmd, file, REDIR_APPEND);
-//     } else if (strcmp(typeRedirection, ">|") == 0) {
-//         return redirSortie(cmd, file, REDIR_WITH_TRUNC);
-//     } else if (strcmp(typeRedirection, "2>") == 0) {
-//         return redirErreur(cmd, file, SIMPLE_REDIR);
-//     } else if (strcmp(typeRedirection, "2>>") == 0) {
-//         return redirErreur(cmd, file, REDIR_APPEND);
-//     }else if (strcmp(typeRedirection, "2>|") == 0) {
-//         return redirErreur(cmd, file, REDIR_WITH_TRUNC);    
-//     } else {
-//         fprintf(stderr, "Type de redirection non reconnu : %s\n", typeRedirection);
-//         return 1;
-//     }
-//}
-// nouveelle fonction extraire mots qui prend en compte le cas des fonctions avec plusieurs 
-// char **extraireMots2(char *phrase, char *delimiteurs) {
-//     char **mots = (char **)malloc(MAX_ARGS * sizeof(char *));
-//     if (mots == NULL) {
-//         perror("Erreur d'allocation de mémoire");
-//         exit(EXIT_FAILURE);
-//     }
 
-//     char *mot = strtok(phrase, delimiteurs);
-//     int index = 0;
-
-//     while (mot != NULL && index < MAX_ARGS) {
-//         mots[index++] = strdup(mot);
-//         mot = strtok(NULL, delimiteurs);
-//     }
-
-//     mots[index] = NULL;
-
-//     return mots;
+  // Rediriger la sortie standard vers le fichier de redirection
+if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], ">>") == 0 || strcmp(mots[i], ">|") == 0) {
+    if (dup2(fd, STDOUT_FILENO) == -1) {
+        perror("dup2");
+        exit(EXIT_FAILURE);
+    }
+}
+    // Rediriger l'entrée standard depuis le fichier de redirection
+    else if (strcmp(mots[i], "<") == 0) {
+        if (dup2(fd, STDIN_FILENO) == -1) {
+            perror("dup2");
+            exit(EXIT_FAILURE);
+        }
+    }
+    // Rediriger la sortie d'erreur vers le fichier de redirection
+    else if (strcmp(mots[i], "2>") == 0 || strcmp(mots[i], "2>>") == 0 || strcmp(mots[i], "2>|") == 0) {
+        if (dup2(fd, STDERR_FILENO) == -1) {
+            perror("dup2");
+            exit(EXIT_FAILURE);
+        }
+    }
+    // Fermer le fichier de redirection
+   if (close(fd) == -1) {
+    perror("close");
+    exit(EXIT_FAILURE);
+}
+    // Appeler executerCommande avec la commande à exécuter
+    int result = executerCommande(cmd);
+// avec cette ligne je quittte le jsh comment gerer ?
+//     int result = executerCommande(cmd);
+//     if (result != 0) {
+//     fprintf(stderr, "Erreur lors de l'exécution de la commande\n");
+//     exit(result);
 // }
+    for (int j = 0; mots[j] != NULL; j++) {
+        free(mots[j]);
+    }
+    free(mots);
 
-
+   // Restaurer la sortie standard
+if (dup2(stdout_backup, STDOUT_FILENO) == -1) {
+    perror("dup2");
+    exit(EXIT_FAILURE);
+}
+close(stdout_backup);
+    return result;
+}

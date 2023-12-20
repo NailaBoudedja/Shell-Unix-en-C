@@ -1,0 +1,5 @@
+11ls: cannot access 'Bure': No such file or directory
+[?2004h[31m[0][32m...et_sys/project_systeme[34m$ [K[31m[0][32m...et_sys/project_systeme[34m$ ^Z[?2004lls: cannot access 'Bur': No such file or directory
+Erreur lors de l'exécution de la commande
+ls: cannot access 'bur': No such file or directory
+[?2004h[31m[0][32m...et_sys/project_systeme[34m$ ^Z[?2004l

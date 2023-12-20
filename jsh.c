@@ -20,7 +20,7 @@ int main() {
         input  =  readline(ligne);  //affichage du prompt  + lecture de la commande entrée
         free(ligne);
        
-        if (input == NULL)   //si la commande entrée est vide 
+        if (input == NULL )   //si la commande entrée est vide 
         {
           exit(retCmd());  //exit avec la derniere val de retour 
         }
@@ -28,8 +28,10 @@ int main() {
         else if(input && *input) 
         {   
               add_history(input);  //ajout de la commande à l'historique du shell
-              //jsh.ret = executerCommande(input); //execution de la commande et stocker sa val de ret   
-               jsh.ret = executerRedirection(input) ; 
+              jsh.ret = executerCommandeAvecRedirection(input) ;
+              //execution de la commande et stocker sa val de ret   
+               //jsh.ret = executionGlobale(input);
+ ; 
        }
         
         free(input);   //libération de la memoire allouée pours inzput
