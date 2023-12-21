@@ -3,6 +3,7 @@
 #include <readline/history.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <linux/limits.h>
 
 
 
@@ -25,7 +26,7 @@ int main() {
         input  =  readline(ligne);  //affichage du prompt  + lecture de la commande entrée
         free(ligne);
        
-        if (input == NULL)   //si la commande entrée est vide 
+        if (input == NULL )   //si la commande entrée est vide 
         {
           exit(retCmd());  //exit avec la derniere val de retour 
         }
