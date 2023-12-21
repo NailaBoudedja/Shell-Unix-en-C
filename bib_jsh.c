@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <stdbool.h>
 //définition des couleurs du prompt
 #define COLOR_RED "\033[31m"
 #define COLOR_GREEN "\033[32m"
@@ -30,6 +31,7 @@
 
 char * currentDir1 = NULL;
 char * oldpath = NULL;
+
 
 struct Prompt jsh;    //déclaration du shell jsh
 
@@ -208,8 +210,9 @@ char *afficherJsh() {
 }
 
 
-char **extraireMots(char *phrase, char *delimiteur) {
+char **extraireMots(char *commande, char *delimiteur) {
     // Vérifier si la chaîne contient uniquement des espaces
+    char * phrase = strdup(commande); 
     int estToutEspaces = 1;
     for (int i = 0; i < strlen(phrase); i++) {
         if (phrase[i] != ' ') {
@@ -269,6 +272,7 @@ char **extraireMots(char *phrase, char *delimiteur) {
         mot = strtok(NULL, delimiteur);
     }
     mots[index] = NULL;
+    free(phrase);
 
     return mots;
 }
@@ -278,6 +282,7 @@ char **extraireMots(char *phrase, char *delimiteur) {
 int executerCommande(char * commande)
 {
     //organiser commande
+    //printf("ma commande %s \n", commande);
     char ** cmd = extraireMots(commande, " ");
     if (strcmp(cmd[0], " ") == 0)
     {
@@ -342,6 +347,9 @@ int executerCommande(char * commande)
                 exit(EXIT_FAILURE);
             }
             else if (pid == 0) {
+                //printf("je suis dans avant exec \n");
+                //printf("premier argument %s \n", cmd[0]);
+               // printf("premier argument %s \n", cmd[1]);
                 execvp(cmd[0], cmd);
                 perror(cmd[0]);
                 exit(EXIT_FAILURE);
@@ -368,18 +376,6 @@ int executerCommande(char * commande)
 }
 
 
- // Rediriger la sortie standard vers le fichier
-       // int save_stdout = dup(STDOUT_FILENO);
-       // dup2(fd, STDOUT_FILENO);
-
-        // Exécution de la commande avec redirection
-        //int ret_redir = executerCommande(cmd);
-
-        // Restaurer la sortie standard
-       // dup2(save_stdout, STDOUT_FILENO);
-
-        // Fermer le fichier
-      //  close(fd); est ce important à gerer ?
 int executerCommandeAvecRedirection(char * commande) {
     // Extraire les mots de la commande
     char ** mots = extraireMots(commande, " ");
@@ -394,7 +390,9 @@ int executerCommandeAvecRedirection(char * commande) {
 
     // Si le symbole de redirection n'est pas trouvé, appeler executerCommande
     if (mots[i] == NULL) {
+        //printf("je suis dans executer commande \n");
         int result = executerCommande(commande);
+        //printf("valeur de retour %d \n",result);
         for (int j = 0; mots[j] != NULL; j++) {
             free(mots[j]);
         }
@@ -409,6 +407,8 @@ int executerCommandeAvecRedirection(char * commande) {
         strcat(cmd, " ");
     }
     char * fichier = mots[i + 1];
+   // printf("-------------nom du fichier %s \n", fichier);
+    //printf("--------------ma commande pour executer commande %s \n",cmd);
 
        // Ouvrir le fichier de redirection
     int fd;
@@ -416,34 +416,52 @@ if (strcmp(mots[i], "<") == 0) {
     // Ouvrir le fichier en mode lecture pour la redirection d'entrée
     fd = open(fichier, O_RDONLY);
 } else if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], "2>") == 0) {
+    //printf("je suis llllllllllllllllllllllllh \n");
     // Ouvrir le fichier en mode écriture pour la redirection de sortie
     fd = open(fichier, O_WRONLY | O_CREAT | O_EXCL, 0644);
 } else if (strcmp(mots[i], ">>") == 0 || strcmp(mots[i], "2>>") == 0) {
     // Ouvrir le fichier en mode append pour la redirection de sortie
-    fd = open(fichier, O_WRONLY | O_CREAT | O_APPEND, 0644);
-} else if (strcmp(mots[i], ">|") == 0 || strcmp(mots[i], "2>|") == 0) {
-    // Ouvrir le fichier en mode écriture avec troncature pour la redirection de sortie
-    fd = open(fichier, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-}
+    fd = open(fichier, O_WRONLY | O_CREAT | O_APPEND, 0664);
+} else if (strcmp(mots[i], ">|") == 0 || strcmp(mots[i], "2>|") == 0){
+           // Ouvrir le fichier en mode écriture avec troncature pour la redirection de sortie
+        fd = open(fichier, O_WRONLY | O_CREAT | O_TRUNC, 0664);
+  }
+   
+
 
 if (fd == -1) {
+   // printf("open n'a pas reussi\n");
     perror("open");
-    exit(EXIT_FAILURE);
-}
+    fprintf(stderr, "Erreur lors de l'ouverture du fichier fd n'a pas reussi %s\n", fichier);
+    goto cleanup;
+    }
 // Sauvegarder la sortie standard
 int stdout_backup = dup(STDOUT_FILENO);
 if (stdout_backup == -1) {
-    perror("dup");
+    perror("dupOut");
+    exit(EXIT_FAILURE);
+}
+int stdin_backup = dup(STDIN_FILENO);
+if (stdin_backup == -1) {
+    perror("dupIn");
     exit(EXIT_FAILURE);
 }
 
+int stderr_backup = dup(STDERR_FILENO);
+if (stderr_backup == -1) {
+    perror("dupErr");
+    exit(EXIT_FAILURE);
+} 
 
   // Rediriger la sortie standard vers le fichier de redirection
-if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], ">>") == 0 || strcmp(mots[i], ">|") == 0) {
+if ((strcmp(mots[i], ">") == 0) || (strcmp(mots[i], ">>") == 0) || (strcmp(mots[i], ">|") == 0)) {
+   // printf("je suis dans > \n");
     if (dup2(fd, STDOUT_FILENO) == -1) {
+      //  printf("je suis dans erreur \n");
         perror("dup2");
         exit(EXIT_FAILURE);
-    }
+    } 
+   // printf("je suis dans 2 > \n");
 }
     // Rediriger l'entrée standard depuis le fichier de redirection
     else if (strcmp(mots[i], "<") == 0) {
@@ -459,29 +477,63 @@ if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], ">>") == 0 || strcmp(mots[i], "
             exit(EXIT_FAILURE);
         }
     }
-    // Fermer le fichier de redirection
-   if (close(fd) == -1) {
+   
+  // Appeler executerCommande avec la commande à exécuter
+
+    int result = executerCommande(cmd);
+// avec cette ligne je quittte le jsh comment gerer ?
+     if (dup2(stdout_backup, STDOUT_FILENO) == -1) {
+    perror("dup2");
+    exit(EXIT_FAILURE);
+    }
+    if (dup2(stdin_backup, STDIN_FILENO) == -1) {
+    perror("dup2");
+    exit(EXIT_FAILURE);
+    }
+
+    if (dup2(stderr_backup, STDERR_FILENO) == -1) {
+    perror("dup2");
+    exit(EXIT_FAILURE);
+    }
+
+    if (result != 0) {
+    fprintf(stderr, "Erreur lors de l'exécution de la commande\n");
+    perror("executerCommande");
+    goto cleanup;  // Utilisation d'une étiquette pour éviter la duplication de code
+}
+  if (close(fd) == -1) {
     perror("close");
     exit(EXIT_FAILURE);
 }
-    // Appeler executerCommande avec la commande à exécuter
-    int result = executerCommande(cmd);
-// avec cette ligne je quittte le jsh comment gerer ?
-//     int result = executerCommande(cmd);
-//     if (result != 0) {
-//     fprintf(stderr, "Erreur lors de l'exécution de la commande\n");
-//     exit(result);
-// }
+   
+   // Restaurer la sortie standard
+  
+
+if (close(stdout_backup) == -1) {
+    perror("close");
+    exit(EXIT_FAILURE);
+}
+if (close(stdin_backup) == -1) {
+    perror("close");
+    exit(EXIT_FAILURE);
+}
+
+
+if (close(stderr_backup) == -1) {
+    perror("close");
+    exit(EXIT_FAILURE);
+}  
+
+
+   // Libérer la mémoire et retourner le résultat
+cleanup:
     for (int j = 0; mots[j] != NULL; j++) {
         free(mots[j]);
     }
     free(mots);
-
-   // Restaurer la sortie standard
-if (dup2(stdout_backup, STDOUT_FILENO) == -1) {
-    perror("dup2");
-    exit(EXIT_FAILURE);
-}
-close(stdout_backup);
+    if(result != 0){
+  //  printf("je suis dans clean\n");
+    return 1;
+    }
     return result;
 }
