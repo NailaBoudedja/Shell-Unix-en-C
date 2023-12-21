@@ -239,10 +239,73 @@ int exitSansArgument()
     exit(k);
 }
 
+int exitCmd(char * val)
+{
+
+    int still_running = 0;  //verifier si il y a des jobs en cours d'execution ou suspendus
+    for (int i = 0; i < nb_jobs; i++) {
+       if ((jobs[i].etat == STOPPED)||(jobs[i].etat == RUNNING))
+       {
+        still_running = 1;
+        break;
+       }
+    }
+    if(still_running)
+    {
+        write(STDERR_FILENO,"There are stopped jobs\n", 24);
+        return 1;
+    }
+    else{
+        //pas de jobs running ou suspendus
+        if(val != NULL)
+        {
+           return exitAvecArgument (atoi(val)); 
+        }
+       else
+        {
+            return exitSansArgument();
+        }
+    } 
+}
 
 
 
+ //fonction pour ignorer un ensemble des signaux par jsh
+void ignoreSignals() {
 
+    //la liste des signaux à ignorer
+    int signals[] = {SIGINT,SIGTERM, SIGTTIN, SIGQUIT, SIGTTOU, SIGTSTP}; 
+    
+    struct sigaction sig_action;
+    sig_action.sa_handler = SIG_IGN; 
+    sigemptyset(&sig_action.sa_mask);
+    sig_action.sa_flags = 0;
+
+    for (int i = 0; i < 6; ++i) {
+        if (sigaction(signals[i], &sig_action, NULL) == -1) {
+            perror("erreur lors de l'ignorance des signaux \n");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+//fonction pour reprendre le traitement par défaut des signaux
+void restoreSignals() {
+
+    int signals[] = {SIGINT,SIGTERM, SIGTTIN, SIGQUIT, SIGTTOU, SIGTSTP};   
+    
+    struct sigaction sig_action;
+    sig_action.sa_handler = SIG_DFL;   //action par défaut
+    sigemptyset(&sig_action.sa_mask);
+    sig_action.sa_flags = 0;
+
+    for (int i = 0; i < 6 ; ++i) {
+        if (sigaction(signals[i], &sig_action, NULL) == -1) {
+            perror("erreur lors de l'ignorance des signaux \n");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
 
 
 //fonction qui update l'etat des jobs
@@ -609,6 +672,58 @@ void creerJob(char* commande, pid_t tableau_des_processus[]) {
     }   
 }
 
+//fonction qui execute une commande en arrière plan
+int executerCmdArrierePlan(char* commande) {
+    
+    char** cmd = extraireMots(commande, " ");
+   
+    if (strcmp(cmd[0], " ") == 0) {
+        //libérer la mémoire
+        for (int i = 0; cmd[i] != NULL; i++) {
+            free(cmd[i]);
+        }
+        return retCmd();
+    } else {
+        
+        pid_t pid = fork();  //cration d'un processus fils
+
+        if (pid < 0) {
+            perror("fork");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) {
+            //code fils
+            
+            restoreSignals();  //restoration des signaux ignorés
+            int fnull = open("/dev/null", O_RDWR);  //ouverture du fichier /dev/null en mode lecture
+            if (fnull == -1) {
+                perror("erreur lors d'ouverture du fichier \n");
+                exit(EXIT_FAILURE);
+            }
+            //rediriger la sortie et entrée et erreur standards vers null
+            if (dup2(fnull, STDIN_FILENO) == -1  || dup2(fnull, STDOUT_FILENO) == -1  || dup2(fnull, STDERR_FILENO) == -1) {
+                perror("erruer lors de la duplication \n");
+                exit(EXIT_FAILURE);
+            }
+            execvp(cmd[0], cmd);  //executer la commande
+
+            exit(1);
+        
+        } else {
+            //création d'un job
+           
+            pid_t tableau_des_processus[1] = {pid};
+            creerJob(commande, tableau_des_processus);
+            
+            //libérer la mémoire
+            for (int i = 0; cmd[i] != NULL; i++) {
+                free(cmd[i]);
+            }
+            free(cmd);
+        }
+    }
+    return 1;
+}
+
 //fonction pour l'affichage des jobs survéillés
 void Jobs() {
     
@@ -660,6 +775,124 @@ void detecterNumJob(char *chaine) {
     }
 }
 
+//fonction pour envoyer un signal a un processus
+int killProcessus(char* signal, pid_t pid)
+{ 
+    //tester si le processus avec pid existe ou non
+    if (kill(pid, 0) == 0) {
+        //processus exite
+        if(signal == NULL)
+        {
+            //envoyer le sign par defaut
+            return -(kill(pid,SIGTERM));
+        }
+        else
+        {
+            int sig = atoi(signal);
+            return -(kill(pid,-sig));  
+        }
+    } else {
+        //le processus n'existe pas
+        write(STDERR_FILENO,"le processus n'existe pas\n",27);
+        return 0; 
+    }
+
+}
+
+//envoyer un signal a un job
+int killJob(char * signal, int id_job)
+{
+    int ret ;
+    //tester si le job existe ou non
+    if((id_job >= 0) && (id_job <= nb_jobs ))
+    {
+        if(jobs[id_job].etat == DONE)
+        {
+            return  1 ;
+        }
+       
+        if (signal == NULL){
+        //envoyer le signal par défaut pour tous les processus du groupe du job
+        ret = kill(-(jobs[id_job].tableau_processus[0]),SIGTERM);
+        return (- ret);
+         }
+        else{
+        int sig = atoi(signal);
+        //envoyer le signal pour tous les processus du groupe du job
+        ret = kill(-(jobs[id_job].tableau_processus[0]),-sig);
+        return (- ret); 
+    }
+    }
+    else{
+        write(STDERR_FILENO,"le job n'existe pas\n",21);
+        return 0;
+    }
+}
+
+int Kill(char * commande)
+{
+    char c = '%';  
+    char *result = strchr(commande,c);  //chercher le caractère % pour déterminer si le signal sera envoyé a un job ou a un processus
+
+    char ** cmd = extraireMots(commande, " ");
+    if (result != NULL) {  
+        //envoyer un signal a un job
+        
+        if(cmd[2] == NULL)   //kill %job
+        {
+          detecterNumJob(cmd[1]);
+          int id_job = atoi(cmd[1]);
+          for (int i = 0; cmd[i] != NULL; i++)
+            {
+                free(cmd[i]);
+            }
+          free(cmd);
+          return  killJob(NULL,id_job-1);
+        }
+        else {
+            //kill sig %job
+            detecterNumJob(cmd[2]);
+            int id_job = atoi(cmd[2]);
+            int ret = killJob(cmd[1],id_job-1);
+            for (int i = 0; cmd[i] != NULL; i++)
+            {
+                free(cmd[i]);
+            }
+            free(cmd);
+            return ret ;
+        }
+
+    } else {
+        //kill processus 
+        if(cmd[2] == NULL)
+        {
+            //kill pid
+            pid_t pid= atoi(cmd[1]);
+
+            for (int i = 0; cmd[i] != NULL; i++)
+            {
+                free(cmd[i]);
+            }
+            free(cmd);
+
+            return killProcessus(NULL,pid);
+        }
+        else{
+
+            //kill sig pid
+            pid_t pid= atoi(cmd[2]);
+            int ret = killProcessus(cmd[1],pid); 
+
+            for (int i = 0; cmd[i] != NULL; i++)
+            {
+                free(cmd[i]);
+            }
+            free(cmd);
+            return ret ; 
+        }
+    }
+}
+
 //fonction pour afficher les jobs qui ont changé d'etat
 void affichageJobsModifies()
 {
@@ -701,3 +934,55 @@ void affichageJobsModifies()
 }
 }
 
+
+int executerCmdGlobal(char * commande)
+{
+
+   
+    //UpdateJobs();
+    char caractere = '&';
+    char* caractere2 = " &";
+
+
+    char * resultat = strstr(commande, caractere2);
+    if (resultat == NULL)
+    {
+        
+        resultat =strchr(commande, caractere) ;
+       
+    }
+    if (resultat != NULL) {
+      
+            size_t longueur = resultat - commande;
+            char newCommande[longueur];
+
+           
+             strncpy(newCommande, commande, longueur);
+             newCommande[longueur] = '\0';  // Assurez-vous d'ajouter le caractère nul à la fin
+
+            int ret = executerCmdArrierePlan(newCommande);
+
+
+            affichageJobsModifies();
+
+        
+            return ret;
+         
+    } else {
+        int rett = executerCommande(commande);
+        char ** cmd = extraireMots(commande, " ");
+        if (strcmp(cmd[0], "jobs") != 0)
+        {
+    
+          affichageJobsModifies();
+        }
+        for (int i = 0; cmd[i] != NULL; i++) {
+            free(cmd[i]);
+        }
+        free(cmd);
+
+        return rett;
+    }
+
+
+}
