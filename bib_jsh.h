@@ -73,6 +73,7 @@ int killJob(char * signal,int id_job);
 int killProcessus(char * signal, pid_t pid);
 void UpdateJobs();
 void detecterNumJob(char *chaine);
+void afficherUnJob(int job_id);
 void affichageJobsModifies();
 void ignoreSignals();
 void restoreSignals();
