@@ -1,18 +1,29 @@
-#include "bib_jsh.h"   //import bibliothèque de prompt
+#include "bib_jsh.h"
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+
+
 int main() {
+
+
+    ignoreSignals(); //jsh ignore un ensemble des signaux
+    
     rl_outstream = stderr; //redirection de la sortie standard vers la sortie erreur
     char *input;    //stocker la commande entrée
     jsh.ret = 0 ;  //initialiser la valeur de retour a 0 
-    jsh.oldPath= pwd();  //initialiser le chemin du rep courrant
+  
+    currentDir1 = (char *)malloc(PATH_MAX); 
+    currentDir1= pwd(); // initialiser le rep courant 
+    char* ligne;
 
     while (1) {
-
-        input  =  readline(afficherJsh());  //affichage du prompt  + lecture de la commande entrée
+        
+        ligne = afficherJsh();
+        input  =  readline(ligne);  //affichage du prompt  + lecture de la commande entrée
+        free(ligne);
        
         if (input == NULL)   //si la commande entrée est vide 
         {
@@ -21,13 +32,17 @@ int main() {
         
         else if(input && *input) 
         {   
-              add_history(input);  //ajout de la commande à l'historique du shell
-              jsh.ret = executerCommande(input); //execution de la commande et stocker sa val de ret     
+            
+            add_history(input);  //ajout de la commande à l'historique du jsh
+            jsh.ret = executerCmdGlobal(input);
+
         }
         
-        free(input);   //libération de la memoire allouée pour input
+        free(input);   //libération de la memoire allouée pours inzput
     }
-
-    free(jsh.oldPath);  //libération de la memoire allouée pour oldpath
+    free(tmpExtraire);
+    free(currentDir1);
+    free(oldpath);
+    free(input);
     return 0;
 }
