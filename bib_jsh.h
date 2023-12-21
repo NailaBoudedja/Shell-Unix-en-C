@@ -26,12 +26,6 @@ char *tronkString(const char *str, int size);
 char *afficherJsh();
 char **extraireMots(char *phrase, char *delimiteur);
 int executerCommande(char * commande);
-//char **extraireMots2(char *ligne);
-/*int redirEntre(char *cmd, char *file);
-int redirSortie (char *cmd , char * file, int r);
-int redirErreur(char *cmd , char *file, int r);
-int executerRedirection(char *commande);
-int executionGlobale(char *commande);*/
 int executerCommandeAvecRedirection(char * commande);
 
 

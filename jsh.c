@@ -29,9 +29,6 @@ int main() {
         {   
               add_history(input);  //ajout de la commande à l'historique du shell
               jsh.ret = executerCommandeAvecRedirection(input) ;
-              //execution de la commande et stocker sa val de ret   
-               //jsh.ret = executionGlobale(input);
- ; 
        }
         
         free(input);   //libération de la memoire allouée pours inzput

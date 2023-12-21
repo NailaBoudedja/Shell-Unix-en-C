@@ -280,8 +280,7 @@ char **extraireMots(char *commande, char *delimiteur) {
 
 int executerCommande(char * commande)
 {
-    //organiser commande
-    //printf("ma commande %s \n", commande);
+
     char ** cmd = extraireMots(commande, " ");
     if (strcmp(cmd[0], " ") == 0)
     {
@@ -350,9 +349,6 @@ int executerCommande(char * commande)
                 exit(EXIT_FAILURE);
             }
             else if (pid == 0) {
-                //printf("je suis dans avant exec \n");
-                //printf("premier argument %s \n", cmd[0]);
-               // printf("premier argument %s \n", cmd[1]);
                 execvp(cmd[0], cmd);
                 perror(cmd[0]);
                 exit(EXIT_FAILURE);
@@ -388,7 +384,7 @@ char ** mots = extraireMots(commande, " ");
 int k = 0;
 int cpt [3];
 int result ;
-int estExterne = 1; // nous permet de tester si on a une cmd avec ou sans redirection 
+int estExterne = 1; // pour tester si on a une cmd avec ou sans redirection 
 for (int i = 0; mots[i] != NULL; i++) {
 if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], "<") == 0 || strcmp(mots[i], ">>") == 0 || strcmp(mots[i], ">|") == 0 || strcmp(mots[i], "2>") == 0 || strcmp(mots[i], "2>>") == 0 || strcmp(mots[i], "2>|") == 0) {
     estExterne = 0;
@@ -396,7 +392,6 @@ cpt[k] = i;
 k ++ ;
 }
 }
-
 if (k != 0){
 k--;
 }
@@ -428,9 +423,7 @@ if (strcmp(mots[cpt[l]], "<") == 0) {
 // Ouvrir le fichier en mode lecture pour la redirection d'entrée
 fd[l] = open(mots[cpt[l]+1], O_RDONLY);
 } else if (strcmp(mots[cpt[l]], ">") == 0 || strcmp(mots[cpt[l]], "2>") == 0) {
-// printf("je suis llllllllllllllllllllllllh \n");
-// Ouvrir le fichier en mode écriture pour la redirection de sortie
-fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_EXCL, 0644);
+fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_EXCL, 0664);
 } else if (strcmp(mots[cpt[l]], ">>") == 0 || strcmp(mots[cpt[l]], "2>>") == 0) {
 // Ouvrir le fichier en mode append pour la redirection de sortie
 fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_APPEND, 0664);
@@ -446,8 +439,6 @@ goto cleanup;
 }
 
 }
-
-
 
 // Sauvegarder la sortie standard
 int stdout_backup = dup(STDOUT_FILENO);
@@ -472,9 +463,7 @@ for (int l = 0; l <= k; l++){
 
 // Rediriger la sortie standard vers le fichier de redirection
 if ((strcmp(mots[cpt[l]], ">") == 0) || (strcmp(mots[cpt[l]], ">>") == 0) || (strcmp(mots[cpt[l]], ">|") == 0)) {
-// printf("je suis dans > \n");
 if (dup2(fd[l], STDOUT_FILENO) == -1) {
-// printf("je suis dans erreur \n");
 perror("dup2");
 exit(EXIT_FAILURE);
 } 
@@ -516,7 +505,7 @@ exit(EXIT_FAILURE);
 if (result != 0) {
 fprintf(stderr, "Erreur lors de l'exécution de la commande\n");
 perror("executerCommande");
-goto cleanup; // Utilisation d'une étiquette pour éviter la duplication de code
+goto cleanup; 
 }
 
 for (int l = 0 ; l <= k ; l++){
@@ -558,3 +547,4 @@ else {
 return result;
 }
 }
+
