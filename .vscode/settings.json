@@ -1,8 +1,6 @@
 {
+    "C_Cpp.errorSquiggles": "disabled",
     "files.associations": {
-        "history.h": "c",
-        "stdio.h": "c",
-        "stdlib.h": "c",
-        "unistd.h": "c"
+        "history.h": "c"
     }
 }
