@@ -66,7 +66,6 @@ char **extraireMots(char *phrase, char *delimiteur);
 int executerCommande(char * commande);
 int executerCmdArrierePlan(char* commande);
 void creerJob(char* commande, pid_t tableau_des_processus[]);
-void supprimerJob(int job_id);
 void Jobs();
 int executerCmdGlobal(char * commande);
 int Kill(char * commande);
@@ -74,10 +73,9 @@ int killJob(char * signal,int id_job);
 int killProcessus(char * signal, pid_t pid);
 void UpdateJobs();
 void detecterNumJob(char *chaine);
-void afficherUnJob(int job_id);
 void affichageJobsModifies();
 void ignoreSignals();
-void restore_default_signals();
+void restoreSignals();
 
 
 #endif
