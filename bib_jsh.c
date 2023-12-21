@@ -987,3 +987,176 @@ int executerCmdGlobal(char * commande)
 
 
 }
+
+int executerCommandeGeneral(char * commande) {
+
+// Extraire les mots de la commande
+char ** mots = extraireMots(commande, " ");
+
+// Parcourir le tableau de mots pour trouver le symbole de redirection
+int k = 0;
+int cpt [3];
+int result ;
+int estExterne = 1; // pour tester si on a une cmd avec ou sans redirection 
+for (int i = 0; mots[i] != NULL; i++) {
+if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], "<") == 0 || strcmp(mots[i], ">>") == 0 || strcmp(mots[i], ">|") == 0 || strcmp(mots[i], "2>") == 0 || strcmp(mots[i], "2>>") == 0 || strcmp(mots[i], "2>|") == 0) {
+    estExterne = 0;
+cpt[k] = i;
+k ++ ;
+}
+}
+if (k != 0){
+k--;
+}
+
+// Si le symbole de redirection n'est pas trouvé, appeler executerCommande
+if (estExterne ) {
+int result = executerCmdGlobal(commande);
+for (int j = 0; mots[j] != NULL; j++) {
+free(mots[j]);
+}
+free(mots);
+
+return result;
+}
+
+// Sinon, diviser la commande en deux parties
+char cmd[1024] = "";
+for (int j = 0; j < cpt[0]; j++) {
+strcat(cmd, mots[j]);
+strcat(cmd, " ");
+}
+char * fichier = mots[cpt[0] + 1];
+
+
+// Ouvrir le fichier de redirection
+int fd[3] ;
+for (int l = 0; l <= k;l++){
+if (strcmp(mots[cpt[l]], "<") == 0) {
+// Ouvrir le fichier en mode lecture pour la redirection d'entrée
+fd[l] = open(mots[cpt[l]+1], O_RDONLY);
+} else if (strcmp(mots[cpt[l]], ">") == 0 || strcmp(mots[cpt[l]], "2>") == 0) {
+fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_EXCL, 0664);
+} else if (strcmp(mots[cpt[l]], ">>") == 0 || strcmp(mots[cpt[l]], "2>>") == 0) {
+// Ouvrir le fichier en mode append pour la redirection de sortie
+fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_APPEND, 0664);
+} else if (strcmp(mots[cpt[l]], ">|") == 0 || strcmp(mots[cpt[l]], "2>|") == 0) {
+// Ouvrir le fichier en mode écriture avec troncature pour la redirection de sortie
+fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_TRUNC, 0664);
+}
+if (fd[l] == -1) {
+result = 1;
+perror("open");
+fprintf(stderr, "Erreur lors de l'ouverture du fichier %s\n", fichier);
+goto cleanup;
+}
+
+}
+
+// Sauvegarder la sortie standard
+int stdout_backup = dup(STDOUT_FILENO);
+if (stdout_backup == -1) {
+perror("dupOut");
+exit(EXIT_FAILURE);
+}
+int stdin_backup = dup(STDIN_FILENO);
+if (stdin_backup == -1) {
+perror("dupIn");
+exit(EXIT_FAILURE);
+}
+
+int stderr_backup = dup(STDERR_FILENO);
+if (stderr_backup == -1) {
+perror("dupErr");
+exit(EXIT_FAILURE);
+} 
+
+
+for (int l = 0; l <= k; l++){
+
+// Rediriger la sortie standard vers le fichier de redirection
+if ((strcmp(mots[cpt[l]], ">") == 0) || (strcmp(mots[cpt[l]], ">>") == 0) || (strcmp(mots[cpt[l]], ">|") == 0)) {
+if (dup2(fd[l], STDOUT_FILENO) == -1) {
+perror("dup2");
+exit(EXIT_FAILURE);
+} 
+}
+// Rediriger l'entrée standard depuis le fichier de redirection
+else if (strcmp(mots[cpt[l]], "<") == 0) {
+if (dup2(fd[l], STDIN_FILENO) == -1) {
+perror("dup2");
+exit(EXIT_FAILURE);
+}
+}
+// Rediriger la sortie d'erreur vers le fichier de redirection
+else if (strcmp(mots[cpt[l]], "2>") == 0 || strcmp(mots[cpt[l]], "2>>") == 0 || strcmp(mots[cpt[l]], "2>|") == 0) {
+if (dup2(fd[l], STDERR_FILENO) == -1) {
+perror("dup2");
+exit(EXIT_FAILURE);
+}
+}
+
+}
+
+
+result = executerCmdGlobal(cmd);
+// avec cette ligne je quittte le jsh comment gerer ?
+if (dup2(stdout_backup, STDOUT_FILENO) == -1) {
+perror("dup2");
+exit(EXIT_FAILURE);
+}
+if (dup2(stdin_backup, STDIN_FILENO) == -1) {
+perror("dup2");
+exit(EXIT_FAILURE);
+}
+
+if (dup2(stderr_backup, STDERR_FILENO) == -1) {
+perror("dup2");
+exit(EXIT_FAILURE);
+}
+
+if (result != 0) {
+fprintf(stderr, "Erreur lors de l'exécution de la commande\n");
+perror("executerCommande");
+goto cleanup; 
+}
+
+for (int l = 0 ; l <= k ; l++){
+if (close(fd[l]) == -1) {
+perror("close");
+exit(EXIT_FAILURE);
+}
+}
+
+// Restaurer la sortie standard
+
+if (close(stdout_backup) == -1) {
+perror("close");
+exit(EXIT_FAILURE);
+}
+if (close(stdin_backup) == -1) {
+perror("close");
+exit(EXIT_FAILURE);
+}
+
+
+if (close(stderr_backup) == -1) {
+perror("close");
+exit(EXIT_FAILURE);
+} 
+
+// Libérer la mémoire et retourner le résultat
+cleanup:
+for (int j = 0; mots[j] != NULL; j++) {
+free(mots[j]);
+}
+free(mots);
+
+if (result != 0){
+    return 1;
+}
+else {
+
+return result;
+}
+}

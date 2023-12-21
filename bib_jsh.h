@@ -77,6 +77,7 @@ void afficherUnJob(int job_id);
 void affichageJobsModifies();
 void ignoreSignals();
 void restoreSignals();
+int executerCommandeGeneral(char * commande);
 
 
 #endif

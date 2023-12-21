@@ -35,7 +35,7 @@ int main() {
         {   
             
             add_history(input);  //ajout de la commande à l'historique du jsh
-            jsh.ret = executerCmdGlobal(input);
+            jsh.ret = executerCommandeGeneral(input);
 
         }
         
