@@ -76,7 +76,6 @@ void UpdateJobs();
 void detecterNumJob(char *chaine);
 void afficherUnJob(int job_id);
 void affichageJobsModifies();
-int tailleTableau(int tableau[]);
 void ignoreSignals();
 void restore_default_signals();
 
