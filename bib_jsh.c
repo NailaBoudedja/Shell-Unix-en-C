@@ -988,94 +988,143 @@ int executerCmdGlobal(char * commande)
 
 
 }
-// deux processsus afin que chaque cmd soit executable dans cheque processus
-int executeCmdAvecPipe(char **cmd1,char **cmd2){
-    int pipefd[2];
-    pid_t pid1, pid2;
 
-    // Créer un tube
-    if (pipe(pipefd) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
+
+
+
+
+int lancerProcessus(int in, int out, char **cmd) {
+    pid_t pid;
+
+    if ((pid = fork()) == 0) {
+        if (in != 0) { //Si in n'est pas 0, elle redirige l'entrée standard du processus depuis in
+            dup2(in, 0);
+            close(in);
+        }
+
+        if (out != 1) { //i out n'est pas 1, elle redirige la sortie standard du processus vers out.
+             dup2(out, 1);
+            close(out);
+        }
+      
+        if (execvp(cmd[0], cmd) < 0) {
+            perror("execvp");
+            exit(EXIT_FAILURE);
+        }
     }
-
-    pid1 = fork();
-    if (pid1 < 0) {
-        perror("fork");
-        exit(EXIT_FAILURE);
+    int status;
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        return 0;
+    } else {
+        return 1;
     }
-
-    if (pid1 == 0) {
-        // Fils 1 : exécuter cmd1
-
-        // Fermer l'extrémité de lecture du tube
-        close(pipefd[0]);
-
-        // Rediriger la sortie standard vers le tube
-        dup2(pipefd[1], STDOUT_FILENO);
-
-        // Exécuter cmd1
-        execvp(cmd1[0], cmd1);
-
-        perror("execvp");
-        exit(EXIT_FAILURE);
-    }
-
-    pid2 = fork();
-    if (pid2 < 0) {
-        perror("fork");
-        exit(EXIT_FAILURE);
-    }
-
-    if (pid2 == 0) {
-        // Fils 2 : exécuter cmd2
-
-        // Fermer l'extrémité d'écriture du tube
-        close(pipefd[1]);
-
-        // Rediriger l'entrée standard depuis le tube
-        dup2(pipefd[0], STDIN_FILENO);
-
-        // Exécuter cmd2
-        execvp(cmd2[0], cmd2);
-
-        perror("execvp");
-        exit(EXIT_FAILURE);
-    }
-
-    // Parent : fermer les deux extrémités du tube et attendre que les deux fils se terminent
-    close(pipefd[0]);
-    close(pipefd[1]);
-    waitpid(pid1, NULL, 0);
-    waitpid(pid2, NULL, 0);
 }
+
+
+int executeCmdAvecPipe(char ***cmds, int nbCmds) { // liste de commandes et le nbr de cmmandes
+    int i;
+    int in = 0;
+    int fd[2];
+
+    for (i = 0; i < nbCmds - 1; ++i) { // pour chaque cmd on cree un tube et lance un processus pour executer cette cmd à l'exception de la derniere
+        pipe(fd);
+         if (lancerProcessus(in, fd[1], cmds[i]) != 0) {//in est l'extrémité de lecture du tube précédent, ecrit dans fd[1]
+           return 1;
+        }
+        close(fd[1]);//fd[1]qui est l'extrémité d'écriture du tube actuel
+        in = fd[0];//Pour la dernière commande, elle redirige  son entrée standard depuis in et l'exécute
+    }
+
+    if (in != 0){
+        dup2(in, 0);
+        close(in); 
+    }
+  
+        return lancerProcessus(in, 1, cmds[i]);
+
+}
+
 
 
 int executerCommandeGeneral(char *commande) {
 
 // Extraire les mots de la commande
 char ** mots = extraireMots(commande, " ");
+
+////deebeugggggggggggggggggggggggg
+int i = 0;
+while(mots[i] != NULL) {
+    printf("%s\n", mots[i]);
+    i++;
+}
+////deebeugggggggggggggggggggggggg
+
  int pipe_found = 0;
+ int nbPipes = 0;
     for (int i = 0; mots[i] != NULL; i++) {
         if (strcmp(mots[i], "|") == 0) {
+            nbPipes++;
             pipe_found = 1;
-            break;
+
         }
     }
      // Si le caractère pipe est trouvé, exécuter les commandes avec pipe
     if (pipe_found) {
-        char **cmd1 = extraireMots(commande, "|");
-        char **cmd2 = extraireMots(cmd1[1], " ");
-        free(cmd1[1]);  // Libérer la mémoire utilisée par cmd1[1]
-        free(cmd1);
+    // Tableau pour stocker les commandes entre les pipes
+    char ***cmds = (char ***)malloc((nbPipes + 1) * sizeof(char **));
+    if (cmds == NULL) {
+        perror("Erreur d'allocation de mémoire");
+        exit(EXIT_FAILURE);
+    }
 
-        executeCmdAvecPipe(cmd1, cmd2);
+    int cmdIndex = 0;
+    int startIndex = 0;
 
-        goto cleanup;
+ // vu q'on modifie le tab de mots enmettant certains el à null, donc on fait une copie avant de le modiifer car i pointera plus sur le mot complet
+int nbMots = 0;
+while (mots[nbMots] != NULL) nbMots++;
+char ** mots_copy = malloc((nbMots + 1) * sizeof(char *));
+for (int i = 0; i < nbMots; i++) {
+    mots_copy[i] = strdup(mots[i]);
+}
+mots_copy[nbMots] = NULL;
+       // Découper la commande en parties entre les pipes
+    for (int i = 0; mots_copy[i] != NULL; i++) {
+        if (strcmp(mots_copy[i], "|") == 0) {
+            mots_copy[i] = NULL; // pour terminer la sous commande
+            cmds[cmdIndex] = &mots_copy[startIndex]; 
+            cmdIndex++;
+            startIndex = i + 1;
+        }
+    }
+    // Dernière commande après le dernier pipe
+    cmds[cmdIndex] = &mots_copy[startIndex];
+    cmds[cmdIndex + 1] = NULL;
+// Afficher le contenu de cmds debeuhggggggggggg
+    for (int i = 0; i <= nbPipes; i++) {
+        printf("Commande %d :\n", i + 1);
+        for (int j = 0; cmds[i][j] != NULL; j++) {
+            printf("  Argument %d : %s\n", j + 1, cmds[i][j]);
+        }
+        printf("\n");}
+     ////// pour debeugggggggggg
 
+        // Exécuter les commandes avec les pipes
+    executeCmdAvecPipe(cmds, nbPipes + 1);
+ // Libérer la mémoire
+    for (int i = 0; i <= nbPipes; i++) {
+        free(cmds[i]);
+        
+        }
+    free(cmds);
+    //free(mots);
+    free(mots_copy);
+
+    }
 
        // return 0;  // Indiquer que la commande avec pipeline a été exécutée
-    }
+    
 // Parcourir le tableau de mots pour trouver le symbole de redirection
 int k = 0;
 int cpt [3];
@@ -1234,7 +1283,6 @@ for (int j = 0; mots[j] != NULL; j++) {
 free(mots[j]);
 }
 free(mots);
-
 if (result != 0){
     return 1;
 }
