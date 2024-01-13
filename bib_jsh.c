@@ -1006,8 +1006,7 @@ int lancerProcessus(int in, int out, char **cmd) {
              dup2(out, 1);
             close(out);
         }
-      
-        if (execvp(cmd[0], cmd) < 0) {
+        if (execvp(cmd[0], cmd) < 0) { //voir cours car null qq part cours 7
             perror("execvp");
             exit(EXIT_FAILURE);
         }
@@ -1022,9 +1021,10 @@ int lancerProcessus(int in, int out, char **cmd) {
 }
 
 
+// on fait en sorte que la sortie de chaque commande est utilisée comme entrée pour la commande suivante.
 int executeCmdAvecPipe(char ***cmds, int nbCmds) { // liste de commandes et le nbr de cmmandes
-    int i;
-    int in = 0;
+    int i; //l'index de la commande actuelle (i)
+    int in = 0; //l'extrémité de lecture du tube précédent
     int fd[2];
 
     for (i = 0; i < nbCmds - 1; ++i) { // pour chaque cmd on cree un tube et lance un processus pour executer cette cmd à l'exception de la derniere
@@ -1034,6 +1034,8 @@ int executeCmdAvecPipe(char ***cmds, int nbCmds) { // liste de commandes et le n
         }
         close(fd[1]);//fd[1]qui est l'extrémité d'écriture du tube actuel
         in = fd[0];//Pour la dernière commande, elle redirige  son entrée standard depuis in et l'exécute
+      
+
     }
 
     if (in != 0){
@@ -1041,24 +1043,59 @@ int executeCmdAvecPipe(char ***cmds, int nbCmds) { // liste de commandes et le n
         close(in); 
     }
   
-        return lancerProcessus(in, 1, cmds[i]);
+        return lancerProcessus(in, 1, cmds[i]); // pour lancer un processus qui execute la derniere cmd 
 
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////
+int executeCmdAvecSubstitution(char ***cmds, int nbCmds) {
+  /* printf("Commandes :\n");
+    for (int k = 0; k < nbCmds; ++k) {
+        printf("Commande %d : ", k);
+        for (int j = 0; cmds[k][j] != NULL; ++j) {
+            printf("%s ", cmds[k][j]);
+        }
+        printf("\n");
+    }*/
+    int i;
+    int in = 0; //stocke le descrpteur de fichier 
+    int fd[2];
 
+    for (i = 0; i < nbCmds; ++i) { // permet de lancer un processus pour chaque coommande 
+        if (i < nbCmds - 1) {
+             if (pipe(fd) == -1) {
+                perror("pipe");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        if (i < nbCmds - 1) {
+            lancerProcessus(in, fd[1], cmds[i]);
+            close(fd[1]);
+            in = fd[0];
+        } else {
+            lancerProcessus(in, 1, cmds[i]);
+        }
+    }
+
+    return 0;
+}
+
+
+//voir code cours9 yes_head 
 
 int executerCommandeGeneral(char *commande) {
 
 // Extraire les mots de la commande
 char ** mots = extraireMots(commande, " ");
 
-////deebeugggggggggggggggggggggggg
-int i = 0;
+////deebeugggggggggggggggggggggggg*******************************************
+/*int i = 0;
 while(mots[i] != NULL) {
     printf("%s\n", mots[i]);
     i++;
-}
-////deebeugggggggggggggggggggggggg
+}*/
+////deebeugggggggggggggggggggggggg*****************************************
 
  int pipe_found = 0;
  int nbPipes = 0;
@@ -1101,30 +1138,117 @@ mots_copy[nbMots] = NULL;
     // Dernière commande après le dernier pipe
     cmds[cmdIndex] = &mots_copy[startIndex];
     cmds[cmdIndex + 1] = NULL;
-// Afficher le contenu de cmds debeuhggggggggggg
-    for (int i = 0; i <= nbPipes; i++) {
+// Afficher le contenu de cmds debeuhggggggggggg**********************************
+    /*for (int i = 0; i <= nbPipes; i++) {
         printf("Commande %d :\n", i + 1);
         for (int j = 0; cmds[i][j] != NULL; j++) {
             printf("  Argument %d : %s\n", j + 1, cmds[i][j]);
         }
-        printf("\n");}
-     ////// pour debeugggggggggg
+        printf("\n");}*/
+     ////// pour debeugggggggggg*********************************************
 
         // Exécuter les commandes avec les pipes
-    executeCmdAvecPipe(cmds, nbPipes + 1);
- // Libérer la mémoire
-    for (int i = 0; i <= nbPipes; i++) {
-        free(cmds[i]);
-        
-        }
+    int result = executeCmdAvecPipe(cmds, nbPipes + 1);
     free(cmds);
-    //free(mots);
     free(mots_copy);
+  
+
+    return result;
+
 
     }
 
-       // return 0;  // Indiquer que la commande avec pipeline a été exécutée
-    
+    // Rechercher les caractères de substitution de processus dans la commande-------------------
+    // Compter le nombre de commandes
+ int subs_found = 0;
+int nbCmds = 0;
+for (int i = 0; mots[i] != NULL; i++) {
+    if (strstr(mots[i], "<(") != NULL) {
+        nbCmds++;
+        pipe_found = 1;
+
+    }
+}
+char tmpfile_template[] = "/tmp/my_cat.XXXXXX";
+// Vérifier si le fichier existe
+if (access(tmpfile_template, F_OK) != -1) {
+    // Si le fichier existe, le supprimer
+    if (unlink(tmpfile_template) == -1) {
+        perror("unlink");
+        exit(EXIT_FAILURE);
+    }
+}
+ // Créer un fifo
+    if (mkfifo(tmpfile_template, S_IRWXU | S_IRWXG | S_IRWXO) == -1) {
+        perror("mkfifo");
+        exit(EXIT_FAILURE);
+    }
+// Remplir le tableau de commandes
+int cmdIndex = 0;
+int startIndex = 0;
+for (int i = 0; mots[i] != NULL; i++) {
+    if (strstr(mots[i], "<(") != NULL) {
+        mots[i] = NULL; // pour terminer la sous commande
+        cmds[cmdIndex] = &mots[startIndex]; 
+        cmdIndex++;
+        startIndex = i + 1;
+         // Construire la commande à exécuter
+            char cmd[BUFSIZ];
+            sprintf(cmd, "%s > %s", cmds[cmdIndex - 1][0], tmpfile_template);
+            char my_cat_cmd[BUFSIZ];
+            sprintf(my_cat_cmd, "./my_cat %s", tmpfile_template);
+            // Exécuter la commande et rediriger sa sortie vers le fichier temporaire
+            if (system(cmd) == -1) {
+                perror("system");
+                exit(EXIT_FAILURE);
+            }
+            // Construire la commande my_cat avec le fichier temporaire comme argument
+            char my_cat_cmd[BUFSIZ];
+            sprintf(my_cat_cmd, "./my_cat %s", tmpfile_template);
+             // Déterminer le nombre actuel d'arguments
+            int argCount = 0;
+            while (cmds[cmdIndex - 1][argCount] != NULL) {
+                argCount++;
+            }
+             // Réallouer de la mémoire pour le tableau pour y ajouter un nouvel élément
+            cmds[cmdIndex - 1] = realloc(cmds[cmdIndex - 1], (argCount + 2) * sizeof(char *));
+            if (cmds[cmdIndex - 1] == NULL) {
+                perror("realloc");
+                exit(EXIT_FAILURE);
+            }
+             // Remplacer la commande par le nom du fichier temporaire
+            // Ajouter tmpfile_template comme nouvel argument
+            cmds[cmdIndex - 1][argCount] = tmpfile_template;
+            cmds[cmdIndex - 1][argCount + 1] = NULL;    
+        } else if (strcmp(mots[i], ")") == 0) {
+            mots[i] = NULL; // ignorer la parenthèse fermante
+        }
+    }
+    // Dernière commande après le dernier pipe
+    cmds[cmdIndex] = &mots[startIndex];
+    cmds[cmdIndex + 1] = NULL;
+     // Exécuter la commande avec substitution
+    int result = executeCmdAvecSubstitution(cmds, nbCmds + 1);
+
+    // Supprimer le fichier temporaire
+    if (unlink(tmpfile_template) == -1) {
+        perror("unlink");
+        exit(EXIT_FAILURE);
+    }
+
+    // Libérer la mémoire
+    for (int i = 0; i < nbCmds + 1; i++) {
+        free(cmds[i]);
+    }
+    free(cmds);
+    for (int j = 0; mots[j] != NULL; j++) {
+        free(mots[j]);
+    }
+    free(mots);
+
+    return result;
+
+    }
 // Parcourir le tableau de mots pour trouver le symbole de redirection
 int k = 0;
 int cpt [3];

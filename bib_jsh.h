@@ -79,6 +79,7 @@ void ignoreSignals();
 void restoreSignals();
 int lancerProcessus(int in, int out, char **cmd);
 int executeCmdAvecPipe(char ***cmds, int nbCmds);
+int executeCmdAvecSubstitution(char ***cmds, int nbCmds);
  int executerCommandeGeneral(char * commande);
 
 
