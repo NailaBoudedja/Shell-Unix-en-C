@@ -1,5 +1,6 @@
 #include "bib_jsh.h"
 #include <fcntl.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
