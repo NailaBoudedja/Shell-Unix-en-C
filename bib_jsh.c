@@ -1527,8 +1527,12 @@ int pipeline(char *commande) {
                     }
                     char **cmd = extraireMots(commande, " ");
                    // printf("redirection milieu  avant execution cmd 0   \n");
-
-                    execvp(cmd[0], cmd);
+                    if(strcmp(cmd[0],"pwd")== 0){
+                        write(STDOUT_FILENO,pwd(),sizeof(pwd()));
+                    }else{
+                         execvp(cmd[0], cmd);
+                    }
+                   
                     // En cas d'échec de l'exécution
                     perror("execvp");
                     exit(EXIT_FAILURE);
@@ -1538,7 +1542,13 @@ int pipeline(char *commande) {
                                    
 
                     char **cmd = extraireMots(tableauDesCommandes[i], " ");
-                    execvp(cmd[0], cmd);
+
+                    if(strcmp(cmd[0],"pwd")== 0){
+                        write(STDOUT_FILENO,pwd(),sizeof(pwd()));
+                    }else{
+                         execvp(cmd[0], cmd);
+                    }
+            
                     // En cas d'échec de l'exécution
                     perror("execvp");
                     exit(EXIT_FAILURE);
@@ -1606,7 +1616,12 @@ int pipeline(char *commande) {
                char **cmd1 = extraireMots(cmd, " ");
                
                
-                execvp(cmd1[0], cmd1);
+                
+                  if(strcmp(cmd1[0],"pwd")== 0){
+                        write(STDOUT_FILENO,pwd(),sizeof(pwd()));
+                    }else{
+                         execvp(cmd1[0], cmd1);
+                    }
                 // En cas d'échec de l'exécution
                 perror("execvp");
                 exit(EXIT_FAILURE);
@@ -1615,7 +1630,12 @@ int pipeline(char *commande) {
              }else{
                 
                  char **cmd = extraireMots(tableauDesCommandes[i], " ");
-                execvp(cmd[0], cmd);
+                  if(strcmp(cmd[0],"pwd")== 0){
+                        write(STDOUT_FILENO,pwd(),sizeof(pwd()));
+                    }else{
+                          execvp(cmd[0], cmd);
+                    }
+               
                 perror("execvp");
                 exit(EXIT_FAILURE);
 
@@ -1689,7 +1709,12 @@ int pipeline(char *commande) {
              }else{
                 
                  char **cmd = extraireMots(tableauDesCommandes[i], " ");
-                execvp(cmd[0], cmd);
+                   if(strcmp(cmd[0],"pwd")== 0){
+                        write(STDOUT_FILENO,pwd(),sizeof(pwd()));
+                    }else{
+                         execvp(cmd[0], cmd);
+                    }
+               
                 // En cas d'échec de l'exécution
                 perror("execvp");
                 exit(EXIT_FAILURE);
