@@ -602,6 +602,23 @@ int executerCommande(char *commande)
             free(cmd);
             return 0;
         }
+          else if (strcmp(cmd[0], "bg") == 0)
+        {
+
+            char* result = detecterNumJob(cmd[1]);
+
+            
+            int ret  = relancerJobArrierePlan(result);
+            free(result);
+        
+            for (int i = 0; cmd[i] != NULL; i++)
+            {
+                free(cmd[i]);
+            }
+            free(cmd);
+            return ret;
+            
+        }
         else if (strcmp(cmd[0], "fg") == 0)
         {
            
@@ -623,6 +640,7 @@ int executerCommande(char *commande)
             return ret;
             
         }
+
         else
         { 
             //commande externe 
@@ -801,6 +819,22 @@ int executerCommande(char *commande)
     }
     return 1;
 }
+
+    int relancerJobArrierePlan(char* id_job)
+    {
+        if (id_job != NULL)
+        {
+            int job_id = atoi(id_job); 
+            if (jobs[job_id - 1].etat == STOPPED)
+            {
+                char* cont = "-18";
+                int ret = (killJob(cont,job_id -1));
+                return ret ;
+            }
+        }
+        return 1;
+    
+    }
 
 //création d'un nouveau job
 void creerJob(char* commande, pid_t tableau_des_processus[]) {
@@ -1426,13 +1460,11 @@ int pipeline(char *commande) {
             //cas par cas
             if((i > 0 ) && (i < n - 1))
             {
-                write(STDERR_FILENO, "commande milieu \n",18);
                 //milieu
                 //chercher 2>
                 char *resultat = strstr(tableauDesCommandes[i], "2>");
                 if (resultat != NULL) {
                   
-                    write(STDERR_FILENO, "commande milieu contient une redirection  \n",44);
 
                     //tella redirection
                     char* commande; char *fichier ;
@@ -1444,8 +1476,6 @@ int pipeline(char *commande) {
                         c ++ ;
 
                     }
-                    write(STDERR_FILENO, "commande a executer dans milieu  ",34 );
-                    write(STDERR_FILENO, commande,sizeof(commande));
                     c=0;
                     for(int k = strlen(resultat)-strlen(tableauDesCommandes[i]);  k<strlen(tableauDesCommandes[i])  ; k++)
                     {
@@ -1454,9 +1484,6 @@ int pipeline(char *commande) {
 
                     }
 
-                    write(STDERR_FILENO, "fichier redirection dans milieu  ",34 );
-                    write(STDERR_FILENO, fichier,sizeof(fichier));
-                   // printf("redirectio ; fichier dznss redirection milieu %s  \n",fichier);
 
 
                     int fd = open(fichier, O_WRONLY | O_CREAT | O_EXCL, 0664);
@@ -1479,10 +1506,7 @@ int pipeline(char *commande) {
                     exit(EXIT_FAILURE);
                   
                 } else {
-                   // printf("else de redirection milieu  avant execution cmd 0   \n");
-
-                    //ulach redirection
-                    // Exécution de la commande sans redirection
+                 
                                    
 
                     char **cmd = extraireMots(tableauDesCommandes[i], " ");
@@ -1496,7 +1520,6 @@ int pipeline(char *commande) {
             }
             if(i == n-1)
             {
-                write(STDERR_FILENO, "commande derniere \n",20);
                
                 //dernier fils 
                 //dup sortie  + dup err
@@ -1505,9 +1528,6 @@ int pipeline(char *commande) {
                 char** mots = extraireMots(tableauDesCommandes[i]," ");
 
                 for (int j = 0; mots[j] != NULL; j++) {
-                     write(STDOUT_FILENO, mots[j],sizeof(mots[j]));
-                     write(STDOUT_FILENO, "\n",2);
-
 
                     if (strcmp(mots[j], ">") == 0 || strcmp(mots[j], "2>") == 0)
                     {
@@ -1521,7 +1541,6 @@ int pipeline(char *commande) {
                 if (k != 0) k--;
 
                 if(k != 0){
-                write(STDERR_FILENO, "commande derniere a une redirection  \n",39);
                
                     
                 
@@ -1532,18 +1551,10 @@ int pipeline(char *commande) {
                     strcat(cmd, " ");
                 }
                  char * fichier = mots[cpt[0] + 1];
-                write(STDERR_FILENO, "commande dernier proc  \n",25);
-                write(STDERR_FILENO, cmd,sizeof(cmd));
-                write(STDERR_FILENO, "\n",2);
 
                  int fd[2];
                   for (int l = 0; l <= k; l++) {
-                    write(STDERR_FILENO, "nom des fichier \n",18);
-                    write(STDERR_FILENO, "\n",2);
 
-                    //write(STDERR_FILENO, mots[cpt[l]+1],sizeof(mots[cpt[l]+1]));
-                    //write(STDERR_FILENO, mots[cpt[l]+2],sizeof(mots[cpt[l]+2]));
-                    //write(STDERR_FILENO, "\n",2);
 
                      if (strcmp(mots[cpt[l]], ">") == 0 || strcmp(mots[cpt[l]], "2>") == 0) {
                              fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_EXCL, 0664);
@@ -1574,11 +1585,9 @@ int pipeline(char *commande) {
 
 
              }else{
-                //printf("cas deux dernier fils  sans redirection    \n");
                 
                  char **cmd = extraireMots(tableauDesCommandes[i], " ");
                 execvp(cmd[0], cmd);
-                // En cas d'échec de l'exécution
                 perror("execvp");
                 exit(EXIT_FAILURE);
 
@@ -1587,17 +1596,12 @@ int pipeline(char *commande) {
             }
             if( i == 0 )
             {
-                write(STDERR_FILENO, "commande premiere\n",19);
                
-                 
-
-                //dernier fils 
-                //dup sortie  + dup err
-                // Parcourir le tableau de mots pour trouver le symbole de redirection
+                
                 int cpt[2]; int k=0;
                 char** mots = extraireMots(tableauDesCommandes[i]," ");
 
-                for (int j = 0; j <mots[j] != NULL; j++) {
+                for (int j = 0;mots[j] != NULL; j++) {
                   
                     if (strcmp(mots[j], "<") == 0 || strcmp(mots[j], "2>") == 0)
                     {
@@ -1613,7 +1617,6 @@ int pipeline(char *commande) {
                 if (k != 0) k--;
                 
                 if(k != 0){
-                    write(STDERR_FILENO, "commande debut cintient redirection \n",38);
                 
                
 
