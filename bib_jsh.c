@@ -530,10 +530,37 @@ int executerCommande(char *commande)
             free(cmd);
             return result;
         }
-        else if (strcmp(cmd[0], "jobs") == 0)
+       else if (strcmp(cmd[0], "jobs") == 0)
         {
+            if(cmd[1] == NULL)
+            {
+                //la cmd est jobs
+                Jobs();
+            }
+            else if(strcmp(cmd[1], "-t") == 0)
+            {
+                
+                //avec l'arboressence des processus
+                if(cmd[2] == NULL)
+                {
+                    //all jobs
+                    afficherjobsAvecT();
+                }
+                else{
+                    //un job précis
+                    detecterNumJob(cmd[2]);
+                    int id_job =  atoi(cmd[2]);
+                    afficherUnjobAvecT(id_job);
+                }
+            }
+            else {
 
-            Jobs();   //executer la commande jobs
+                //un seul job sans t
+                detecterNumJob(cmd[1]);
+                int id_job =  atoi(cmd[1]);
+                afficherUnjobSansT(id_job);
+
+            }
             for (int i = 0; cmd[i] != NULL; i++)
             {
                 free(cmd[i]);
@@ -541,6 +568,7 @@ int executerCommande(char *commande)
             free(cmd);
             return 0;
         }
+
         else if (strcmp(cmd[0], "kill") == 0)
         {
    
@@ -1697,6 +1725,142 @@ int contientRedirection(const char *commande) {
         }
     }
     return 0;
+}
+
+
+void afficherUnjobSansT(int id_job)
+{
+
+    UpdateJobs();
+   
+    char buffer[1024];
+    
+   
+  
+        if(jobs[id_job - 1].etat != KILLED && jobs[id_job - 1].est_surveille == 1)   //affichage des jobs surveillés et non killed
+        {
+        int length = snprintf(buffer, sizeof(buffer), "[%d] %d ", jobs[id_job - 1].job_id, jobs[id_job - 1].tableau_processus[0]);
+
+        switch (jobs[id_job - 1].etat) {
+            case RUNNING:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Running\t");
+                break;
+            case STOPPED:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Stopped\t");
+                break;
+            case DETACHED:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Detached\t");
+                break;
+            case KILLED:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Killed\t");
+                break;
+            case DONE:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Done\t");
+                break;
+            default:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Unknown\t");
+        }
+
+        length += snprintf(buffer + length, sizeof(buffer) - length, "%s\n", jobs[id_job - 1].cmd);
+        write(STDOUT_FILENO, buffer, length);
+
+}
+}
+
+
+
+void afficherUnjobAvecT(int id_job)
+{
+
+    UpdateJobs();
+   
+    char buffer[1024];
+
+    
+    if(jobs[id_job - 1].etat != KILLED && jobs[id_job - 1].est_surveille == 1)   //affichage des jobs surveillés et non killed
+    {
+
+        //affichage des infos du job
+        int length = snprintf(buffer, sizeof(buffer), "[%d] %d ", jobs[id_job - 1].job_id, jobs[id_job - 1].tableau_processus[0]);
+
+        switch (jobs[id_job - 1].etat) {
+            case RUNNING:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Running\t");
+                break;
+            case STOPPED:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Stopped\t");
+                break;
+            case DETACHED:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Detached\t");
+                break;
+            case KILLED:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Killed\t");
+                break;
+            case DONE:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Done\t");
+                break;
+            default:
+                length += snprintf(buffer + length, sizeof(buffer) - length, "Unknown\t");
+        }
+
+        length += snprintf(buffer + length, sizeof(buffer) - length, "%s\n", jobs[id_job - 1].cmd);
+        write(STDOUT_FILENO, buffer, length);
+        
+
+        
+        //affichage des infos des processus
+        //vider le buffer
+        int r, status ; int length2;
+        for (int i = 0 ; i < jobs[id_job - 1].nb_processus; i ++ )
+        {
+            length2 = snprintf(buffer, sizeof(buffer), "      |%d  ", jobs[id_job - 1].tableau_processus[i]);
+            
+            r= waitpid(jobs[id_job - 1].tableau_processus[i], &status, WNOHANG | WUNTRACED);
+            
+            if(r == 0)
+            {
+                length2 += snprintf(buffer + length2, sizeof(buffer) - length2, "Running\t");
+            }
+                
+            else {
+                if (WIFEXITED(status))
+                {
+                    length2 += snprintf(buffer + length2, sizeof(buffer) - length2, "Done\t");
+                }
+                else if (WIFSIGNALED(status))
+                {
+                    length2 += snprintf(buffer + length2, sizeof(buffer) - length2, "Killed\t");
+                }
+                else if (WIFSTOPPED(status))
+                {
+                    length2 += snprintf(buffer + length2, sizeof(buffer) - length2, "Stopped\t");
+                }
+             }
+              
+              length2 += snprintf(buffer + length2, sizeof(buffer) - length2, "%s\n", jobs[id_job - 1].cmd);
+              write(STDOUT_FILENO, buffer, length2);
+        
+            
+
+
+}
+}
+}
+
+
+void afficherjobsAvecT()
+{
+
+
+    //maj des etats des jobs
+    UpdateJobs();
+   
+    char buffer[1024];
+   
+    for (int i = 1; i <= nb_jobs; i++) {
+        afficherUnjobAvecT(i);
+    }
+    
 }
 
 

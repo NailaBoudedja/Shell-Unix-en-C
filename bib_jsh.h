@@ -92,4 +92,7 @@ int relancerJobArrierePlan(char* id_job);
 int relancerJobAvantPlan(char* id_job);
 int pipeline(char *commande);
 int contientRedirection(const char *commande);
+void afficherjobsAvecT();
+void afficherUnjobAvecT(int id_job);
+void afficherUnjobSansT(int id_job);
 #endif
