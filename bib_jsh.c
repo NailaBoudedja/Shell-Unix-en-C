@@ -500,7 +500,7 @@ char *afficherJsh() {
 
 
 
-//fonction qui excute un commande entrée
+//fonction qui excute un commande entrée 
 int executerCommande(char *commande)
 {
 
@@ -1234,7 +1234,7 @@ int executerCmdGlobal(char * commande)
 
 }
 
-// decoupe une commande contenant une substituion
+// Decoupe une commande contenant une substituion
 char** extraireMotsAvecSubstitution(char *commande) {
     char **mots = malloc(MAX_ARGS * sizeof(char *));
     int index = 0;
