@@ -77,6 +77,9 @@ int executerCmdArrierePlan(char* commande);
 void creerJob(char* commande, pid_t tableau_des_processus[]);
 void Jobs();
 int executerCmdGlobal(char * commande);
+char** extraireMotsAvecSubstitution(char *commande);
+int executeCmdAvecSubstitution(char *commande);
+
 int Kill(char * commande);
 int killJob(char * signal,int id_job);
 int killProcessus(char * signal, pid_t pid);

@@ -1234,6 +1234,166 @@ int executerCmdGlobal(char * commande)
 
 }
 
+// decoupe une commande contenant une substituion
+char** extraireMotsAvecSubstitution(char *commande) {
+    char **mots = malloc(MAX_ARGS * sizeof(char *));
+    int index = 0;
+    char *debut = commande;
+    char *fin = commande;
+    int dansSubstitution = 0;
+
+    while (*fin != '\0') {
+        if (*fin == ' ' && !dansSubstitution) {
+            mots[index] = strndup(debut, fin - debut);
+            index++;
+            debut = fin + 1;
+        } else if (*fin == '<' && *(fin + 1) == '(') {
+            dansSubstitution = 1;
+        } else if (*fin == ')' && dansSubstitution) {
+            mots[index] = strndup(debut, fin - debut + 1);
+            index++;
+            debut = fin + 1;
+            dansSubstitution = 0;
+        }
+        fin++;
+    }
+
+    if (debut != fin) {
+        mots[index] = strndup(debut, fin - debut);
+        index++;
+    }
+
+    mots[index] = NULL;
+
+    return mots;
+}
+
+
+int executeCmdAvecSubstitution(char *commande) {
+    // on extraie les mots de la commande
+    char** mots = extraireMotsAvecSubstitution(commande);
+
+    // Compte le nombre de substitutions de processus
+    int nbCmds = 0;
+    for (int i = 0; mots[i] != NULL; i++) {
+        if (strstr(mots[i], "<(") != NULL) {
+            nbCmds++;
+        }
+    }
+
+    // on cree un tableau pour stocker les noms des tubes nommés
+    char *pipes[nbCmds];
+
+    // Crée un tube nommé pour chaque commande substituée
+    for (int i = 0; i < nbCmds; i++) {
+        char pipeName[20];
+         sprintf(pipeName, "/tmp/pipe%d", i);
+         if (access(pipeName, F_OK) != -1) {
+            if (unlink(pipeName) == -1) {
+                perror("unlink");
+                exit(EXIT_FAILURE);
+            }
+        }
+        // Créer le tube nommé
+        if (mkfifo(pipeName, 0666) == -1) {
+            perror("mkfifo");
+            exit(EXIT_FAILURE);
+        }
+        pipes[i] = strdup(pipeName);
+    }
+    int cmdIndex = 0;
+    for (int i = 0; mots[i] != NULL; i++) { 
+    if (strstr(mots[i], "<(") != NULL) {
+        char* cmdCopy = strdup(mots[i] + 2);  // Créer une copie de la chaîne, en excluant les deux premiers caractères ("<(")
+        cmdCopy[strlen(cmdCopy) - 1] = '\0';  // Enlever le dernier caractère (")")
+       // printf("-------------Commande a executer----- : %s\n", cmdCopy); /// ici on a bien echo 123
+
+        char* cmd = strtok(cmdCopy, " \t");
+     //   printf("-------------Commande apres strok : %s\n", cmd); // ici on a bien echo dans cmd 
+
+        char *args[MAX_ARGS];
+        int argCount = 0;
+        while ((args[argCount] = strtok(NULL, " \t")) != NULL) {
+          //  printf("--------------------Argument %d : %s\n", argCount, args[argCount]); // on a bien 123
+            argCount++;
+        }
+        args[argCount] = NULL; // pour marquer la fin du tableau args 
+
+            pid_t pid = fork();
+            if (pid == -1) {
+                perror("fork");
+                exit(EXIT_FAILURE);
+            } else if (pid == 0) {
+                // Dans le processus fils
+                int fd = open(pipes[cmdIndex], O_WRONLY); // on ouvre le tube en ecrture 
+              //  printf("-----------------pipe ouvert est %s\n",pipes[cmdIndex]);
+                if (fd == -1) {
+                    perror("open");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDOUT_FILENO); // on redirige sa sortie vers le tube 
+                close(fd);
+            for (int j = 0; j < argCount; j++) {
+            }
+                execvp(cmd, args);
+                perror("execvp");
+                exit(EXIT_FAILURE);
+            } // le fils 
+            cmdIndex++;
+            free(cmdCopy);
+        }
+    }
+    
+    // Lancer la commande principale avec l'entrée connectée à la sortie du dernier tube
+        char *args[MAX_ARGS];
+        int index = 0;
+    for (int i = 0; i < nbCmds; i++) {
+    args[index] = pipes[i];
+   //     printf("---------------Ajout du tube %s comme argument\n", pipes[i]);  // Imprimer le nom du tube
+
+    index++;
+    }
+    args[index] = NULL;  
+   
+  //  printf("--------------------la commmande a executer est %s\n",mots[0]);
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    } else if (pid == 0) {
+        // Dans le processus fils
+        int fd = open(pipes[nbCmds - 1], O_RDONLY);  // Ouvrir le tube nommé pour la lecture
+        if (fd == -1) {
+            perror("open");
+            exit(EXIT_FAILURE);
+        }
+        dup2(fd, STDIN_FILENO);
+        close(fd);
+
+        execvp(mots[0], args);
+        perror("execvp");
+        exit(EXIT_FAILURE);
+    }
+
+    // Attendre la fin de tous les processus fils
+    for (int i = 0; i < nbCmds + 1; i++) {
+        wait(NULL);
+    }
+
+
+    // Supprimer les tubes nommés dans le processus parent
+    for (int i = 0; i < nbCmds; i++) {
+        if (unlink(pipes[i]) == -1) {
+            perror("unlink");
+            exit(EXIT_FAILURE);
+        }
+        free(pipes[i]);
+    }
+   // free(cmdCopy);
+
+    return 0;
+}
+
 
 //execution des commandes simple + commandes des redirection 
 
@@ -1242,9 +1402,14 @@ int executerCommandeGeneral(char * commande) {
     // Extraire les mots de la commande
     char ** mots = extraireMots(commande, " ");
     int k = 0, cpt[3], result, estExterne = 1; // Pour tester si on a une commande avec ou sans redirection
-
+    int estSubstitution = 0; // pour tester si on a une substitution de processus
     // Parcourir le tableau de mots pour trouver le symbole de redirection
     for (int i = 0; mots[i] != NULL; i++) {
+         if (strstr(mots[i], "<(") != NULL) {
+        estSubstitution = 1;
+        break;
+    }
+
         if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], "<") == 0 || strcmp(mots[i], ">>") == 0 || 
             strcmp(mots[i], ">|") == 0 || strcmp(mots[i], "2>") == 0 || strcmp(mots[i], "2>>") == 0 || 
             strcmp(mots[i], "2>|") == 0) {
@@ -1254,6 +1419,16 @@ int executerCommandeGeneral(char * commande) {
         }
     }
     if (k != 0) k--;
+    // Si la substitution de processus est trouvée, appeler executeCmdAvecSubstitution
+    if (estSubstitution) {
+    result = executeCmdAvecSubstitution(commande);
+    for (int j = 0; mots[j] != NULL; j++) {
+        free(mots[j]);
+    }
+    free(mots);
+
+    return result;
+}
 
     // Si le symbole de redirection n'est pas trouvé, appeler executerCmdGlobal
     if (estExterne) {
