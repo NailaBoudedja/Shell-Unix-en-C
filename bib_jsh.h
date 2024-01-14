@@ -77,9 +77,8 @@ void afficherUnJob(int job_id);
 void affichageJobsModifies();
 void ignoreSignals();
 void restoreSignals();
-int lancerProcessus(int in, int out, char **cmd);
-int executeCmdAvecPipe(char ***cmds, int nbCmds);
-int executeCmdAvecSubstitution(char ***cmds, int nbCmds);
+char** extraireMotsAvecSubstitution(char *commande);
+int executeCmdAvecSubstitution(char *commande);
  int executerCommandeGeneral(char * commande);
 
 

@@ -992,269 +992,180 @@ int executerCmdGlobal(char * commande)
 
 
 
-
-int lancerProcessus(int in, int out, char **cmd) {
-    pid_t pid;
-
-    if ((pid = fork()) == 0) {
-        if (in != 0) { //Si in n'est pas 0, elle redirige l'entrée standard du processus depuis in
-            dup2(in, 0);
-            close(in);
-        }
-
-        if (out != 1) { //i out n'est pas 1, elle redirige la sortie standard du processus vers out.
-             dup2(out, 1);
-            close(out);
-        }
-        if (execvp(cmd[0], cmd) < 0) { //voir cours car null qq part cours 7
-            perror("execvp");
-            exit(EXIT_FAILURE);
-        }
-    }
-    int status;
-    waitpid(pid, &status, 0);
-    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-        return 0;
-    } else {
-        return 1;
-    }
-}
-
-
-// on fait en sorte que la sortie de chaque commande est utilisée comme entrée pour la commande suivante.
-int executeCmdAvecPipe(char ***cmds, int nbCmds) { // liste de commandes et le nbr de cmmandes
-    int i; //l'index de la commande actuelle (i)
-    int in = 0; //l'extrémité de lecture du tube précédent
-    int fd[2];
-
-    for (i = 0; i < nbCmds - 1; ++i) { // pour chaque cmd on cree un tube et lance un processus pour executer cette cmd à l'exception de la derniere
-        pipe(fd);
-         if (lancerProcessus(in, fd[1], cmds[i]) != 0) {//in est l'extrémité de lecture du tube précédent, ecrit dans fd[1]
-           return 1;
-        }
-        close(fd[1]);//fd[1]qui est l'extrémité d'écriture du tube actuel
-        in = fd[0];//Pour la dernière commande, elle redirige  son entrée standard depuis in et l'exécute
-      
-
-    }
-
-    if (in != 0){
-        dup2(in, 0);
-        close(in); 
-    }
-  
-        return lancerProcessus(in, 1, cmds[i]); // pour lancer un processus qui execute la derniere cmd 
-
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////
-int executeCmdAvecSubstitution(char ***cmds, int nbCmds) {
-  /* printf("Commandes :\n");
-    for (int k = 0; k < nbCmds; ++k) {
-        printf("Commande %d : ", k);
-        for (int j = 0; cmds[k][j] != NULL; ++j) {
-            printf("%s ", cmds[k][j]);
-        }
-        printf("\n");
-    }*/
-    int i;
-    int in = 0; //stocke le descrpteur de fichier 
-    int fd[2];
+char** extraireMotsAvecSubstitution(char *commande) {
+    char **mots = malloc(MAX_ARGS * sizeof(char *));
+    int index = 0;
+    char *debut = commande;
+    char *fin = commande;
+    int dansSubstitution = 0;
 
-    for (i = 0; i < nbCmds; ++i) { // permet de lancer un processus pour chaque coommande 
-        if (i < nbCmds - 1) {
-             if (pipe(fd) == -1) {
-                perror("pipe");
+    while (*fin != '\0') {
+        if (*fin == ' ' && !dansSubstitution) {
+            mots[index] = strndup(debut, fin - debut);
+            index++;
+            debut = fin + 1;
+        } else if (*fin == '<' && *(fin + 1) == '(') {
+            dansSubstitution = 1;
+        } else if (*fin == ')' && dansSubstitution) {
+            mots[index] = strndup(debut, fin - debut + 1);
+            index++;
+            debut = fin + 1;
+            dansSubstitution = 0;
+        }
+        fin++;
+    }
+
+    if (debut != fin) {
+        mots[index] = strndup(debut, fin - debut);
+        index++;
+    }
+
+    mots[index] = NULL;
+
+    return mots;
+}
+int executeCmdAvecSubstitution(char *commande) {
+    // on extraie les mots de la commande
+    char** mots = extraireMotsAvecSubstitution(commande);
+
+    // Compte le nombre de substitutions de processus
+    int nbCmds = 0;
+    for (int i = 0; mots[i] != NULL; i++) {
+        if (strstr(mots[i], "<(") != NULL) {
+            nbCmds++;
+        }
+    }
+
+    // on cree un tableau pour stocker les noms des tubes nommés
+    char *pipes[nbCmds];
+
+    // Crée un tube nommé pour chaque commande substituée
+    for (int i = 0; i < nbCmds; i++) {
+        char pipeName[20];
+         sprintf(pipeName, "/tmp/pipe%d", i);
+         if (access(pipeName, F_OK) != -1) {
+            if (unlink(pipeName) == -1) {
+                perror("unlink");
                 exit(EXIT_FAILURE);
             }
         }
+        // Créer le tube nommé
+        if (mkfifo(pipeName, 0666) == -1) {
+            perror("mkfifo");
+            exit(EXIT_FAILURE);
+        }
+        pipes[i] = strdup(pipeName);
+    }
+    int cmdIndex = 0;
+    for (int i = 0; mots[i] != NULL; i++) { 
+    if (strstr(mots[i], "<(") != NULL) {
+        char* cmdCopy = strdup(mots[i] + 2);  // Créer une copie de la chaîne, en excluant les deux premiers caractères ("<(")
+        cmdCopy[strlen(cmdCopy) - 1] = '\0';  // Enlever le dernier caractère (")")
+       // printf("-------------Commande a executer----- : %s\n", cmdCopy); /// ici on a bien echo 123
 
-        if (i < nbCmds - 1) {
-            lancerProcessus(in, fd[1], cmds[i]);
-            close(fd[1]);
-            in = fd[0];
-        } else {
-            lancerProcessus(in, 1, cmds[i]);
+        char* cmd = strtok(cmdCopy, " \t");
+     //   printf("-------------Commande apres strok : %s\n", cmd); // ici on a bien echo dans cmd 
+
+        char *args[MAX_ARGS];
+        int argCount = 0;
+        while ((args[argCount] = strtok(NULL, " \t")) != NULL) {
+          //  printf("--------------------Argument %d : %s\n", argCount, args[argCount]); // on a bien 123
+            argCount++;
+        }
+        args[argCount] = NULL; // pour marquer la fin du tableau args 
+
+            pid_t pid = fork();
+            if (pid == -1) {
+                perror("fork");
+                exit(EXIT_FAILURE);
+            } else if (pid == 0) {
+                // Dans le processus fils
+                int fd = open(pipes[cmdIndex], O_WRONLY); // on ouvre le tube en ecrture 
+              //  printf("-----------------pipe ouvert est %s\n",pipes[cmdIndex]);
+                if (fd == -1) {
+                    perror("open");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDOUT_FILENO); // on redirige sa sortie vers le tube 
+                close(fd);
+            for (int j = 0; j < argCount; j++) {
+            }
+                execvp(cmd, args);
+                perror("execvp");
+                exit(EXIT_FAILURE);
+            } // le fils 
+            cmdIndex++;
+            free(cmdCopy);
         }
     }
+    
+    // Lancer la commande principale avec l'entrée connectée à la sortie du dernier tube
+        char *args[MAX_ARGS];
+        int index = 0;
+    for (int i = 0; i < nbCmds; i++) {
+    args[index] = pipes[i];
+   //     printf("---------------Ajout du tube %s comme argument\n", pipes[i]);  // Imprimer le nom du tube
+
+    index++;
+    }
+    args[index] = NULL;  
+   
+  //  printf("--------------------la commmande a executer est %s\n",mots[0]);
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    } else if (pid == 0) {
+        // Dans le processus fils
+        int fd = open(pipes[nbCmds - 1], O_RDONLY);  // Ouvrir le tube nommé pour la lecture
+        if (fd == -1) {
+            perror("open");
+            exit(EXIT_FAILURE);
+        }
+        dup2(fd, STDIN_FILENO);
+        close(fd);
+
+        execvp(mots[0], args);
+        perror("execvp");
+        exit(EXIT_FAILURE);
+    }
+
+    // Attendre la fin de tous les processus fils
+    for (int i = 0; i < nbCmds + 1; i++) {
+        wait(NULL);
+    }
+
+
+    // Supprimer les tubes nommés dans le processus parent
+    for (int i = 0; i < nbCmds; i++) {
+        if (unlink(pipes[i]) == -1) {
+            perror("unlink");
+            exit(EXIT_FAILURE);
+        }
+        free(pipes[i]);
+    }
+   // free(cmdCopy);
 
     return 0;
 }
-
-
-//voir code cours9 yes_head 
 
 int executerCommandeGeneral(char *commande) {
 
 // Extraire les mots de la commande
 char ** mots = extraireMots(commande, " ");
 
-////deebeugggggggggggggggggggggggg*******************************************
-/*int i = 0;
-while(mots[i] != NULL) {
-    printf("%s\n", mots[i]);
-    i++;
-}*/
-////deebeugggggggggggggggggggggggg*****************************************
-
- int pipe_found = 0;
- int nbPipes = 0;
-    for (int i = 0; mots[i] != NULL; i++) {
-        if (strcmp(mots[i], "|") == 0) {
-            nbPipes++;
-            pipe_found = 1;
-
-        }
-    }
-     // Si le caractère pipe est trouvé, exécuter les commandes avec pipe
-    if (pipe_found) {
-    // Tableau pour stocker les commandes entre les pipes
-    char ***cmds = (char ***)malloc((nbPipes + 1) * sizeof(char **));
-    if (cmds == NULL) {
-        perror("Erreur d'allocation de mémoire");
-        exit(EXIT_FAILURE);
-    }
-
-    int cmdIndex = 0;
-    int startIndex = 0;
-
- // vu q'on modifie le tab de mots enmettant certains el à null, donc on fait une copie avant de le modiifer car i pointera plus sur le mot complet
-int nbMots = 0;
-while (mots[nbMots] != NULL) nbMots++;
-char ** mots_copy = malloc((nbMots + 1) * sizeof(char *));
-for (int i = 0; i < nbMots; i++) {
-    mots_copy[i] = strdup(mots[i]);
-}
-mots_copy[nbMots] = NULL;
-       // Découper la commande en parties entre les pipes
-    for (int i = 0; mots_copy[i] != NULL; i++) {
-        if (strcmp(mots_copy[i], "|") == 0) {
-            mots_copy[i] = NULL; // pour terminer la sous commande
-            cmds[cmdIndex] = &mots_copy[startIndex]; 
-            cmdIndex++;
-            startIndex = i + 1;
-        }
-    }
-    // Dernière commande après le dernier pipe
-    cmds[cmdIndex] = &mots_copy[startIndex];
-    cmds[cmdIndex + 1] = NULL;
-// Afficher le contenu de cmds debeuhggggggggggg**********************************
-    /*for (int i = 0; i <= nbPipes; i++) {
-        printf("Commande %d :\n", i + 1);
-        for (int j = 0; cmds[i][j] != NULL; j++) {
-            printf("  Argument %d : %s\n", j + 1, cmds[i][j]);
-        }
-        printf("\n");}*/
-     ////// pour debeugggggggggg*********************************************
-
-        // Exécuter les commandes avec les pipes
-    int result = executeCmdAvecPipe(cmds, nbPipes + 1);
-    free(cmds);
-    free(mots_copy);
-  
-
-    return result;
-
-
-    }
-
-    // Rechercher les caractères de substitution de processus dans la commande-------------------
-    // Compter le nombre de commandes
- int subs_found = 0;
-int nbCmds = 0;
-for (int i = 0; mots[i] != NULL; i++) {
-    if (strstr(mots[i], "<(") != NULL) {
-        nbCmds++;
-        pipe_found = 1;
-
-    }
-}
-char tmpfile_template[] = "/tmp/my_cat.XXXXXX";
-// Vérifier si le fichier existe
-if (access(tmpfile_template, F_OK) != -1) {
-    // Si le fichier existe, le supprimer
-    if (unlink(tmpfile_template) == -1) {
-        perror("unlink");
-        exit(EXIT_FAILURE);
-    }
-}
- // Créer un fifo
-    if (mkfifo(tmpfile_template, S_IRWXU | S_IRWXG | S_IRWXO) == -1) {
-        perror("mkfifo");
-        exit(EXIT_FAILURE);
-    }
-// Remplir le tableau de commandes
-int cmdIndex = 0;
-int startIndex = 0;
-for (int i = 0; mots[i] != NULL; i++) {
-    if (strstr(mots[i], "<(") != NULL) {
-        mots[i] = NULL; // pour terminer la sous commande
-        cmds[cmdIndex] = &mots[startIndex]; 
-        cmdIndex++;
-        startIndex = i + 1;
-         // Construire la commande à exécuter
-            char cmd[BUFSIZ];
-            sprintf(cmd, "%s > %s", cmds[cmdIndex - 1][0], tmpfile_template);
-            char my_cat_cmd[BUFSIZ];
-            sprintf(my_cat_cmd, "./my_cat %s", tmpfile_template);
-            // Exécuter la commande et rediriger sa sortie vers le fichier temporaire
-            if (system(cmd) == -1) {
-                perror("system");
-                exit(EXIT_FAILURE);
-            }
-            // Construire la commande my_cat avec le fichier temporaire comme argument
-            char my_cat_cmd[BUFSIZ];
-            sprintf(my_cat_cmd, "./my_cat %s", tmpfile_template);
-             // Déterminer le nombre actuel d'arguments
-            int argCount = 0;
-            while (cmds[cmdIndex - 1][argCount] != NULL) {
-                argCount++;
-            }
-             // Réallouer de la mémoire pour le tableau pour y ajouter un nouvel élément
-            cmds[cmdIndex - 1] = realloc(cmds[cmdIndex - 1], (argCount + 2) * sizeof(char *));
-            if (cmds[cmdIndex - 1] == NULL) {
-                perror("realloc");
-                exit(EXIT_FAILURE);
-            }
-             // Remplacer la commande par le nom du fichier temporaire
-            // Ajouter tmpfile_template comme nouvel argument
-            cmds[cmdIndex - 1][argCount] = tmpfile_template;
-            cmds[cmdIndex - 1][argCount + 1] = NULL;    
-        } else if (strcmp(mots[i], ")") == 0) {
-            mots[i] = NULL; // ignorer la parenthèse fermante
-        }
-    }
-    // Dernière commande après le dernier pipe
-    cmds[cmdIndex] = &mots[startIndex];
-    cmds[cmdIndex + 1] = NULL;
-     // Exécuter la commande avec substitution
-    int result = executeCmdAvecSubstitution(cmds, nbCmds + 1);
-
-    // Supprimer le fichier temporaire
-    if (unlink(tmpfile_template) == -1) {
-        perror("unlink");
-        exit(EXIT_FAILURE);
-    }
-
-    // Libérer la mémoire
-    for (int i = 0; i < nbCmds + 1; i++) {
-        free(cmds[i]);
-    }
-    free(cmds);
-    for (int j = 0; mots[j] != NULL; j++) {
-        free(mots[j]);
-    }
-    free(mots);
-
-    return result;
-
-    }
 // Parcourir le tableau de mots pour trouver le symbole de redirection
 int k = 0;
 int cpt [3];
 int result ;
+int estSubstitution = 0; // pour tester si on a une substitution de processus
 int estExterne = 1; // pour tester si on a une cmd avec ou sans redirection 
 for (int i = 0; mots[i] != NULL; i++) {
+    if (strstr(mots[i], "<(") != NULL) {
+        estSubstitution = 1;
+        break;
+    }
 if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], "<") == 0 || strcmp(mots[i], ">>") == 0 || strcmp(mots[i], ">|") == 0 || strcmp(mots[i], "2>") == 0 || strcmp(mots[i], "2>>") == 0 || strcmp(mots[i], "2>|") == 0) {
     estExterne = 0;
 cpt[k] = i;
@@ -1265,6 +1176,16 @@ if (k != 0){
 k--;
 }
 
+// Si la substitution de processus est trouvée, appeler executeCmdAvecSubstitution
+if (estSubstitution) {
+    result = executeCmdAvecSubstitution(commande);
+    for (int j = 0; mots[j] != NULL; j++) {
+        free(mots[j]);
+    }
+    free(mots);
+
+    return result;
+}
 // Si le symbole de redirection n'est pas trouvé, appeler executerCommande
 if (estExterne ) {
 int result = executerCmdGlobal(commande);

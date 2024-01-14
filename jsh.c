@@ -41,6 +41,7 @@ int main() {
         
         free(input);   //libération de la memoire allouée pours inzput
     }
+    
     free(tmpExtraire);
     free(currentDir1);
     free(oldpath);
