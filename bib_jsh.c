@@ -14,6 +14,11 @@
 #include <limits.h>
 #include <sys/stat.h>  
 
+#include <signal.h>   // Pour sigaction et les signaux
+
+
+
+
 
 //définition des couleurs du prompt
 #define COLOR_RED "\033[31m"
@@ -33,10 +38,17 @@ char * tmpExtraire = NULL ;
 int nb_jobs = 0;
 
 
+int saved_stdin =0;
+int saved_stdout = 0;
+int saved_stderr = 0;
+
+int estPipe = 0;
+
 struct Prompt jsh;    //déclaration du shell jsh
 
 
 Job jobs[MAX_JOBS];
+
 
 
 
@@ -275,14 +287,14 @@ int exitCmd(char * val)
 void ignoreSignals() {
 
     //la liste des signaux à ignorer
-    int signals[] = {SIGINT,SIGTERM, SIGTTIN, SIGQUIT, SIGTTOU, SIGTSTP}; 
+    int signals[] = {SIGTERM, SIGTTIN, SIGQUIT, SIGTTOU, SIGTSTP};  //SIGINT,
     
     struct sigaction sig_action;
     sig_action.sa_handler = SIG_IGN; 
     sigemptyset(&sig_action.sa_mask);
     sig_action.sa_flags = 0;
 
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 5; ++i) {
         if (sigaction(signals[i], &sig_action, NULL) == -1) {
             perror("erreur lors de l'ignorance des signaux \n");
             exit(EXIT_FAILURE);
@@ -292,26 +304,27 @@ void ignoreSignals() {
 
 //fonction pour reprendre le traitement par défaut des signaux
 void restoreSignals() {
-
-    int signals[] = {SIGINT,SIGTERM, SIGTTIN, SIGQUIT, SIGTTOU, SIGTSTP};   
-    
+    int signals[] = {SIGINT, SIGTERM, SIGTTIN, SIGQUIT, SIGTTOU, SIGTSTP};   
     struct sigaction sig_action;
-    sig_action.sa_handler = SIG_DFL;   //action par défaut
+    sig_action.sa_handler = SIG_DFL;   // Action par défaut
     sigemptyset(&sig_action.sa_mask);
     sig_action.sa_flags = 0;
 
-    for (int i = 0; i < 6 ; ++i) {
+    for (int i = 0; i < 6; ++i) {
         if (sigaction(signals[i], &sig_action, NULL) == -1) {
-            perror("erreur lors de l'ignorance des signaux \n");
+            perror("Erreur lors de la restauration du signal par défaut");
             exit(EXIT_FAILURE);
         }
     }
 }
 
 
+
 //fonction qui update l'etat des jobs
 void UpdateJobs()
 {
+
+  
     int result; int signal; int status;
     //parcourir tous les jobs
     for (int i = 0; i < nb_jobs; i++) 
@@ -357,6 +370,8 @@ void UpdateJobs()
                     }
                     else if(WIFSIGNALED(status))
                     { 
+
+                        
                         //le processus a terminé avec un signal
                         signal = WTERMSIG(status); //reccuperer le numero du signal
                         if ( (signal == 19) || (signal == 20)) {
@@ -481,9 +496,15 @@ char *afficherJsh() {
     return aretourner;
 }
 
+
+
+
+
 //fonction qui excute un commande entrée
 int executerCommande(char *commande)
 {
+
+   
     //découper la commande selon l'espace en un tableau de mots 
     char **cmd = extraireMots(commande, " ");
 
@@ -581,6 +602,27 @@ int executerCommande(char *commande)
             free(cmd);
             return 0;
         }
+        else if (strcmp(cmd[0], "fg") == 0)
+        {
+           
+            char* result = detecterNumJob(cmd[1]);
+            
+            int ret  = relancerJobAvantPlan(result);
+
+            free(result);
+           
+
+            for (int i = 0; cmd[i] != NULL; i++)
+            {
+                free(cmd[i]);
+            }
+            free(cmd);
+
+           
+            
+            return ret;
+            
+        }
         else
         { 
             //commande externe 
@@ -594,8 +636,57 @@ int executerCommande(char *commande)
             {  
                 //code fils 
                 setpgid(getpid(),getpid());   //affecter son grouppid 
-                restoreSignals(); //restorer les signaux ignorés
+                restoreSignals();
+
+                struct sigaction sa;
+
+                sigemptyset(&sa.sa_mask);
+                sa.sa_handler = SIG_IGN; 
+                sa.sa_flags = 0; 
+
+              
+                if (sigaction(SIGTTOU, &sa, NULL) == -1) {
+                    perror("Erreur sigaction SIGTTOU");
+                    exit(EXIT_FAILURE);
+                }
+
+               
+                if (sigaction(SIGTTIN, &sa, NULL) == -1) {
+                    perror("Erreur sigaction SIGINT");
+                    exit(EXIT_FAILURE);
+                }
+
+                
+               
+                  if (isatty(STDIN_FILENO))
+                {
+                    if (tcsetpgrp(STDIN_FILENO, getpid()) == -1) {
+                    perror("tcsetpgrp du pere");
+                    exit(EXIT_FAILURE);
+                    }
+
+                }
+                
+                
+                // Restaurer le traitement par défaut pour SIGTTOU et SIGTTIN
+                sa.sa_handler = SIG_DFL;
+
+                if (sigaction(SIGTTOU, &sa, NULL) == -1) {
+                    perror("Erreur sigaction SIGTTOU");
+                    exit(EXIT_FAILURE);
+                }
+
+                if (sigaction(SIGTTIN, &sa, NULL) == -1) {
+                    perror("Erreur sigaction SIGTTIN");
+                    exit(EXIT_FAILURE);
+                }
+
+
+
+                
+             
                 execvp(cmd[0], cmd);  //executer la commande 
+                
                 perror(cmd[0]);
                 exit(EXIT_FAILURE);
             }
@@ -615,25 +706,65 @@ int executerCommande(char *commande)
                     r = waitpid(pid, &status, WUNTRACED | WCONTINUED);
                         
                 }while( !WIFEXITED(status) && !WIFSTOPPED(status) && !WIFSIGNALED(status));
-               
-                
-                    
-               if(WIFSTOPPED(status))
-                {
-                    //si le processus fils a capté un signal stop == création d'un job suspendu en arrière plan
-                    jobs[nb_jobs].job_id = nb_jobs + 1;
-                    jobs[nb_jobs].cmd = strdup(commande);
-                    jobs[nb_jobs].etat = STOPPED;
-                    jobs[nb_jobs].a_afficher = 1;
-                    jobs[nb_jobs].est_surveille = 1;
-                    jobs[nb_jobs].nb_processus = 1;
-                    jobs[nb_jobs].tableau_processus[0] = pid ;
-                    nb_jobs ++ ;
-                    return 0 ;
+
+
+                struct sigaction sa;
+
+                sigemptyset(&sa.sa_mask);
+                sa.sa_handler = SIG_IGN; 
+                sa.sa_flags = 0; 
+
+              
+                if (sigaction(SIGTTOU, &sa, NULL) == -1) {
+                    perror("Erreur sigaction SIGTTOU");
+                    exit(EXIT_FAILURE);
                 }
-                else if(WIFSIGNALED(status))
+
+               
+                if (sigaction(SIGTTIN, &sa, NULL) == -1) {
+                    perror("Erreur sigaction SIGINT");
+                    exit(EXIT_FAILURE);
+                }
+
+                
+                if (isatty(STDIN_FILENO))
+                {
+                    if (tcsetpgrp(STDIN_FILENO, getpid()) == -1) {
+                    perror("tcsetpgrp du pere");
+                    exit(EXIT_FAILURE);
+                    }
+
+                }
+                
+        
+                // Restaurer le traitement par défaut pour SIGTTOU et SIGTTIN
+                sa.sa_handler = SIG_DFL;
+
+                if (sigaction(SIGTTOU, &sa, NULL) == -1) {
+                    perror("Erreur sigaction SIGTTOU");
+                    exit(EXIT_FAILURE);
+                }
+
+                if (sigaction(SIGTTIN, &sa, NULL) == -1) {
+                    perror("Erreur sigaction SIGTTIN");
+                    exit(EXIT_FAILURE);
+                }
+
+                    
+                if (WIFEXITED(status))   //terminaison normale du fils
+                {
+                    jobs[nb_jobs].etat = DONE;
+                    return (WEXITSTATUS(status));  //renvoyer le code de retour du fils
+                    
+                }else if(WIFSIGNALED(status))
                 { 
-                     //si le processus fils a capté un signal autre que stop == création d'un job killed en arrière plan
+                    //si le processus fils a capté un signal autre que stop == création d'un job killed en arrière plan
+                    saved_stdin = dup(STDIN_FILENO);
+                    saved_stderr = dup(STDERR_FILENO);
+                    saved_stdout= dup(STDOUT_FILENO);
+
+
+
                     jobs[nb_jobs].job_id = nb_jobs + 1;
                     jobs[nb_jobs].cmd = strdup(commande);
                     jobs[nb_jobs].etat = KILLED;
@@ -643,9 +774,27 @@ int executerCommande(char *commande)
                     jobs[nb_jobs].tableau_processus[0] = pid ;
                     nb_jobs ++ ;
                     return 0 ;
-                }else if (WIFEXITED(status))   //terminaison normale du fils
-                {
-                    return (WEXITSTATUS(status));  //renvoyer le code de retour du fils
+                }
+                else if(WIFSTOPPED(status))
+               {
+                   
+                    
+                    //printf("le signal recu %d \n", sigst)
+                    //si le processus fils a capté un signal stop == création d'un job suspendu en arrière plan
+                    saved_stdin = dup(STDIN_FILENO);
+                    saved_stderr = dup(STDERR_FILENO);
+                    saved_stdout= dup(STDOUT_FILENO);
+
+
+                    jobs[nb_jobs].job_id = nb_jobs + 1;
+                    jobs[nb_jobs].cmd = strdup(commande);
+                    jobs[nb_jobs].etat = STOPPED;
+                    jobs[nb_jobs].a_afficher = 1;
+                    jobs[nb_jobs].est_surveille = 1;
+                    jobs[nb_jobs].nb_processus = 1;
+                    jobs[nb_jobs].tableau_processus[0] = pid ;
+                    nb_jobs ++ ;
+                    return 0 ;
                 }
             }
         }
@@ -676,6 +825,7 @@ void creerJob(char* commande, pid_t tableau_des_processus[]) {
 //fonction qui execute une commande en arrière plan
 int executerCmdArrierePlan(char* commande) {
     
+    
     char** cmd = extraireMots(commande, " ");
    
     if (strcmp(cmd[0], " ") == 0) {
@@ -700,6 +850,31 @@ int executerCmdArrierePlan(char* commande) {
                 perror("erreur lors d'ouverture du fichier \n");
                 exit(EXIT_FAILURE);
             }
+
+            //sauvgarder les descripteurs
+
+
+            saved_stdin = dup(STDIN_FILENO);
+            saved_stderr = dup(STDERR_FILENO);
+            saved_stdout= dup(STDOUT_FILENO);
+
+           /* if (dup2(saved_stdin, STDIN_FILENO) == -1) {
+                perror("dup2");
+                exit(EXIT_FAILURE);
+            }
+            if (dup2(saved_stdout, STDOUT_FILENO) == -1) {
+                    perror("dup2");
+                    exit(EXIT_FAILURE);
+            }
+            if (dup2(saved_stderr, STDERR_FILENO) == -1) {
+                    perror("dup2");
+                    exit(EXIT_FAILURE);
+            }
+            */
+            close(saved_stderr);
+            close(saved_stdin);
+            close(saved_stdout);
+        
             //rediriger la sortie et entrée et erreur standards vers null
             if (dup2(fnull, STDIN_FILENO) == -1  || dup2(fnull, STDOUT_FILENO) == -1  || dup2(fnull, STDERR_FILENO) == -1) {
                 perror("erruer lors de la duplication \n");
@@ -767,13 +942,20 @@ void Jobs() {
 }
 
 //supprimer le char : % d'une chaine pour reccuperer le id du job
-void detecterNumJob(char *chaine) {
+char* detecterNumJob(char *chaine) {
+    char *result = NULL;
     if (chaine != NULL && chaine[0] == '%') {
         int len = strlen(chaine);
-        for (int i = 0; i < len; ++i) {
-            chaine[i] = chaine[i + 1];   // decalage des positions
+        // Allouer de la mémoire pour 'result' (len pour les caractères + 1 pour le caractère nul)
+        result = malloc(len * sizeof(char));
+        if (result != NULL) {
+            for (int i = 0; i < len - 1; ++i) {
+                result[i] = chaine[i + 1]; // Décalage des positions
+            }
+            result[len - 1] = '\0'; // Ajout du caractère nul à la fin
         }
     }
+    return result;
 }
 
 //fonction pour envoyer un signal a un processus
@@ -841,8 +1023,9 @@ int Kill(char * commande)
         
         if(cmd[2] == NULL)   //kill %job
         {
-          detecterNumJob(cmd[1]);
-          int id_job = atoi(cmd[1]);
+          char* result = detecterNumJob(cmd[1]);
+          int id_job = atoi(result);
+          free(result);
           for (int i = 0; cmd[i] != NULL; i++)
             {
                 free(cmd[i]);
@@ -852,8 +1035,9 @@ int Kill(char * commande)
         }
         else {
             //kill sig %job
-            detecterNumJob(cmd[2]);
-            int id_job = atoi(cmd[2]);
+            char * result = detecterNumJob(cmd[2]);
+            int id_job = atoi(result);
+            free(result);
             int ret = killJob(cmd[1],id_job-1);
             for (int i = 0; cmd[i] != NULL; i++)
             {
@@ -988,175 +1172,528 @@ int executerCmdGlobal(char * commande)
 
 }
 
+
+//execution des commandes simple + commandes des redirection 
+
 int executerCommandeGeneral(char * commande) {
+    
+    // Extraire les mots de la commande
+    char ** mots = extraireMots(commande, " ");
+    int k = 0, cpt[3], result, estExterne = 1; // Pour tester si on a une commande avec ou sans redirection
 
-// Extraire les mots de la commande
-char ** mots = extraireMots(commande, " ");
+    // Parcourir le tableau de mots pour trouver le symbole de redirection
+    for (int i = 0; mots[i] != NULL; i++) {
+        if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], "<") == 0 || strcmp(mots[i], ">>") == 0 || 
+            strcmp(mots[i], ">|") == 0 || strcmp(mots[i], "2>") == 0 || strcmp(mots[i], "2>>") == 0 || 
+            strcmp(mots[i], "2>|") == 0) {
+            estExterne = 0;
+            cpt[k] = i;
+            k++;
+        }
+    }
+    if (k != 0) k--;
 
-// Parcourir le tableau de mots pour trouver le symbole de redirection
-int k = 0;
-int cpt [3];
-int result ;
-int estExterne = 1; // pour tester si on a une cmd avec ou sans redirection 
-for (int i = 0; mots[i] != NULL; i++) {
-if (strcmp(mots[i], ">") == 0 || strcmp(mots[i], "<") == 0 || strcmp(mots[i], ">>") == 0 || strcmp(mots[i], ">|") == 0 || strcmp(mots[i], "2>") == 0 || strcmp(mots[i], "2>>") == 0 || strcmp(mots[i], "2>|") == 0) {
-    estExterne = 0;
-cpt[k] = i;
-k ++ ;
-}
-}
-if (k != 0){
-k--;
-}
+    // Si le symbole de redirection n'est pas trouvé, appeler executerCmdGlobal
+    if (estExterne) {
+        result = executerCmdGlobal(commande);
+        for (int j = 0; mots[j] != NULL; j++) free(mots[j]);
+        free(mots);
+        return result;
+    }
 
-// Si le symbole de redirection n'est pas trouvé, appeler executerCommande
-if (estExterne ) {
-int result = executerCmdGlobal(commande);
-for (int j = 0; mots[j] != NULL; j++) {
-free(mots[j]);
-}
-free(mots);
+    // Sinon, diviser la commande en deux parties
+    char cmd[1024] = "";
+    for (int j = 0; j < cpt[0]; j++) {
+        strcat(cmd, mots[j]);
+        strcat(cmd, " ");
+    }
+    char * fichier = mots[cpt[0] + 1];
 
-return result;
-}
+    // Ouvrir le fichier de redirection
+    int fd[3];
+    for (int l = 0; l <= k; l++) {
+        if (strcmp(mots[cpt[l]], "<") == 0) {
+            fd[l] = open(mots[cpt[l]+1], O_RDONLY);
+        } else if (strcmp(mots[cpt[l]], ">") == 0 || strcmp(mots[cpt[l]], "2>") == 0) {
+            fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_EXCL, 0664);
+        } else if (strcmp(mots[cpt[l]], ">>") == 0 || strcmp(mots[cpt[l]], "2>>") == 0) {
+            fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_APPEND, 0664);
+        } else if (strcmp(mots[cpt[l]], ">|") == 0 || strcmp(mots[cpt[l]], "2>|") == 0) {
+            fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_TRUNC, 0664);
+        }
+        if (fd[l] == -1) {
+            result = 1;
+            perror("open");
+            fprintf(stderr, "Erreur lors de l'ouverture du fichier %s\n", fichier);
+            goto cleanup;
+        }
+    }
 
-// Sinon, diviser la commande en deux parties
-char cmd[1024] = "";
-for (int j = 0; j < cpt[0]; j++) {
-strcat(cmd, mots[j]);
-strcat(cmd, " ");
-}
-char * fichier = mots[cpt[0] + 1];
+    // Sauvegarder la sortie standard, l'entrée standard et la sortie d'erreur
+    int stdout_backup = dup(STDOUT_FILENO);
+    int stdin_backup = dup(STDIN_FILENO);
+    int stderr_backup = dup(STDERR_FILENO);
 
+    if (stdout_backup == -1 || stdin_backup == -1 || stderr_backup == -1) {
+        perror("dup");
+        exit(EXIT_FAILURE);
+    }
 
-// Ouvrir le fichier de redirection
-int fd[3] ;
-for (int l = 0; l <= k;l++){
-if (strcmp(mots[cpt[l]], "<") == 0) {
-// Ouvrir le fichier en mode lecture pour la redirection d'entrée
-fd[l] = open(mots[cpt[l]+1], O_RDONLY);
-} else if (strcmp(mots[cpt[l]], ">") == 0 || strcmp(mots[cpt[l]], "2>") == 0) {
-fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_EXCL, 0664);
-} else if (strcmp(mots[cpt[l]], ">>") == 0 || strcmp(mots[cpt[l]], "2>>") == 0) {
-// Ouvrir le fichier en mode append pour la redirection de sortie
-fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_APPEND, 0664);
-} else if (strcmp(mots[cpt[l]], ">|") == 0 || strcmp(mots[cpt[l]], "2>|") == 0) {
-// Ouvrir le fichier en mode écriture avec troncature pour la redirection de sortie
-fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_TRUNC, 0664);
-}
-if (fd[l] == -1) {
-result = 1;
-perror("open");
-fprintf(stderr, "Erreur lors de l'ouverture du fichier %s\n", fichier);
-goto cleanup;
-}
+    // Redirection des flux
+    for (int l = 0; l <= k; l++) {
+        if ((strcmp(mots[cpt[l]], ">") == 0) || (strcmp(mots[cpt[l]], ">>") == 0) || (strcmp(mots[cpt[l]], ">|") == 0)) {
+            if (dup2(fd[l], STDOUT_FILENO) == -1) {
+                perror("dup2");
+                exit(EXIT_FAILURE);
+            } 
+        } else if (strcmp(mots[cpt[l]], "<") == 0) {
+            if (dup2(fd[l], STDIN_FILENO) == -1) {
+                perror("dup2");
+                exit(EXIT_FAILURE);
+            }
+        } else if (strcmp(mots[cpt[l]], "2>") == 0 || strcmp(mots[cpt[l]], "2>>") == 0 || strcmp(mots[cpt[l]], "2>|") == 0) {
+            if (dup2(fd[l], STDERR_FILENO) == -1) {
+                perror("dup2");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
 
-}
+    result = executerCmdGlobal(cmd);
 
-// Sauvegarder la sortie standard
-int stdout_backup = dup(STDOUT_FILENO);
-if (stdout_backup == -1) {
-perror("dupOut");
-exit(EXIT_FAILURE);
-}
-int stdin_backup = dup(STDIN_FILENO);
-if (stdin_backup == -1) {
-perror("dupIn");
-exit(EXIT_FAILURE);
-}
+    // Restaurer les flux standard
+    if (dup2(stdout_backup, STDOUT_FILENO) == -1 || dup2(stdin_backup, STDIN_FILENO) == -1 ||
+        dup2(stderr_backup, STDERR_FILENO) == -1) {
+        perror("dup2");
+        exit(EXIT_FAILURE);
+    }
 
-int stderr_backup = dup(STDERR_FILENO);
-if (stderr_backup == -1) {
-perror("dupErr");
-exit(EXIT_FAILURE);
-} 
+    // Fermeture des descripteurs de fichiers et des sauvegardes
+    for (int l = 0 ; l <= k ; l++) {
+        if (close(fd[l]) == -1) {
+            perror("close");
+            exit(EXIT_FAILURE);
+        }
+    }
+    if (close(stdout_backup) == -1 || close(stdin_backup) == -1 || close(stderr_backup) == -1) {
+        perror("close");
+        exit(EXIT_FAILURE);
+    } 
 
+    // Libérer la mémoire et retourner le résultat
+    cleanup:
+    for (int j = 0; mots[j] != NULL; j++) {
+        free(mots[j]);
+    }
+    free(mots);
 
-for (int l = 0; l <= k; l++){
-
-// Rediriger la sortie standard vers le fichier de redirection
-if ((strcmp(mots[cpt[l]], ">") == 0) || (strcmp(mots[cpt[l]], ">>") == 0) || (strcmp(mots[cpt[l]], ">|") == 0)) {
-if (dup2(fd[l], STDOUT_FILENO) == -1) {
-perror("dup2");
-exit(EXIT_FAILURE);
-} 
-}
-// Rediriger l'entrée standard depuis le fichier de redirection
-else if (strcmp(mots[cpt[l]], "<") == 0) {
-if (dup2(fd[l], STDIN_FILENO) == -1) {
-perror("dup2");
-exit(EXIT_FAILURE);
-}
-}
-// Rediriger la sortie d'erreur vers le fichier de redirection
-else if (strcmp(mots[cpt[l]], "2>") == 0 || strcmp(mots[cpt[l]], "2>>") == 0 || strcmp(mots[cpt[l]], "2>|") == 0) {
-if (dup2(fd[l], STDERR_FILENO) == -1) {
-perror("dup2");
-exit(EXIT_FAILURE);
-}
-}
-
-}
-
-
-result = executerCmdGlobal(cmd);
-// avec cette ligne je quittte le jsh comment gerer ?
-if (dup2(stdout_backup, STDOUT_FILENO) == -1) {
-perror("dup2");
-exit(EXIT_FAILURE);
-}
-if (dup2(stdin_backup, STDIN_FILENO) == -1) {
-perror("dup2");
-exit(EXIT_FAILURE);
-}
-
-if (dup2(stderr_backup, STDERR_FILENO) == -1) {
-perror("dup2");
-exit(EXIT_FAILURE);
-}
-
-if (result != 0) {
-fprintf(stderr, "Erreur lors de l'exécution de la commande\n");
-perror("executerCommande");
-goto cleanup; 
-}
-
-for (int l = 0 ; l <= k ; l++){
-if (close(fd[l]) == -1) {
-perror("close");
-exit(EXIT_FAILURE);
-}
-}
-
-// Restaurer la sortie standard
-
-if (close(stdout_backup) == -1) {
-perror("close");
-exit(EXIT_FAILURE);
-}
-if (close(stdin_backup) == -1) {
-perror("close");
-exit(EXIT_FAILURE);
+    return (result != 0) ? 1 : result;
 }
 
 
-if (close(stderr_backup) == -1) {
-perror("close");
-exit(EXIT_FAILURE);
-} 
 
-// Libérer la mémoire et retourner le résultat
-cleanup:
-for (int j = 0; mots[j] != NULL; j++) {
-free(mots[j]);
-}
-free(mots);
 
-if (result != 0){
-    return 1;
-}
-else {
 
-return result;
+
+int relancerJobAvantPlan(char* id_job)
+{
+
+
+  
+   if(id_job != NULL)
+   {
+
+
+    int job_id  = atoi(id_job);
+
+    
+
+    if(jobs[job_id - 1].est_surveille == 1)
+    {   
+    //write(STDOUT_FILENO, jobs[job_id -1 ].cmd, strlen(jobs[job_id -1 ].cmd));
+    dup2(saved_stdin, STDIN_FILENO);
+    dup2(saved_stdout, STDOUT_FILENO);
+    dup2(saved_stderr, STDERR_FILENO);
+
+    close(saved_stdin);
+    close(saved_stdout);
+    close(saved_stderr);
+
+    if(jobs[job_id - 1 ].etat == STOPPED)
+    {
+        char* cont = "-18";
+        int ret = (killJob(cont,job_id -1));
+        UpdateJobs();
+       
+    }
+
+    int r, status ;
+    do{
+    
+        r = waitpid(jobs[job_id - 1].tableau_processus[0], &status, WUNTRACED | WCONTINUED);
+                        
+    }while( !WIFEXITED(status) && !WIFSTOPPED(status) && !WIFSIGNALED(status));
+
+    
+    if(WIFSIGNALED(status))
+    {
+      
+        jobs[job_id  - 1].etat = KILLED;
+        return 0;
+    }
+    else if(WIFSTOPPED(status))
+    {
+
+
+        //si le processus fils a capté un signal stop
+        jobs[job_id  - 1].etat = STOPPED;
+        return 0;
+    }
+   
+    else if (WIFEXITED(status))   //terminaison normale du fils
+    {
+
+       
+        jobs[job_id  - 1].etat = DONE;
+    
+        return (WEXITSTATUS(status));  //renvoyer le code de retour du fils
+    }
+    
+    }
+   }
+   return 1;
+
 }
+
+
+int compterOccurrences(char *chaine, char caractere) {
+    int occurrences = 0;
+
+
+    while (*chaine != '\0') {
+        
+        if (*chaine == caractere) {
+            occurrences++;
+        }
+        chaine++;
+    }
+
+    return occurrences;
 }
+
+
+int pipeline(char *commande) {
+    int n = compterOccurrences(commande, '|') + 1;
+    char **tableauDesCommandes = extraireMots(commande, "|");
+
+    int tubes[n - 1][2];
+    for (int i = 0; i < n - 1; i++) {
+        if (pipe(tubes[i]) == -1) {
+            perror("Erreur lors de la création du tube");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    for (int i = 0; i < n; i++) {
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("fork");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) { // Processus fils
+            setpgid(getpid(), getpid());
+            restoreSignals();
+        
+            for (int j = 0; j < n - 1; j++) {
+                if (j != i - 1) {
+                    close(tubes[j][0]);
+                }
+                if (j != i) {
+                    close(tubes[j][1]);
+                }
+            }
+
+            if (i > 0) {
+                dup2(tubes[i - 1][0], STDIN_FILENO);
+                close(tubes[i - 1][0]);
+            }
+
+            if (i < n - 1) {
+                dup2(tubes[i][1], STDOUT_FILENO);
+                close(tubes[i][1]);
+            }
+
+
+            //cas par cas
+            if((i > 0 ) && (i < n - 1))
+            {
+                write(STDERR_FILENO, "commande milieu \n",18);
+                //milieu
+                //chercher 2>
+                char *resultat = strstr(tableauDesCommandes[i], "2>");
+                if (resultat != NULL) {
+                  
+                    write(STDERR_FILENO, "commande milieu contient une redirection  \n",44);
+
+                    //tella redirection
+                    char* commande; char *fichier ;
+                    int c =0;
+
+                    for(int k = 0;  k< strlen(resultat) - strlen(tableauDesCommandes[i]) ; k++)
+                    {
+                        commande[c]= tableauDesCommandes[i][k];
+                        c ++ ;
+
+                    }
+                    write(STDERR_FILENO, "commande a executer dans milieu  ",34 );
+                    write(STDERR_FILENO, commande,sizeof(commande));
+                    c=0;
+                    for(int k = strlen(resultat)-strlen(tableauDesCommandes[i]);  k<strlen(tableauDesCommandes[i])  ; k++)
+                    {
+                        fichier[c]= tableauDesCommandes[i][k];
+                        c ++;
+
+                    }
+
+                    write(STDERR_FILENO, "fichier redirection dans milieu  ",34 );
+                    write(STDERR_FILENO, fichier,sizeof(fichier));
+                   // printf("redirectio ; fichier dznss redirection milieu %s  \n",fichier);
+
+
+                    int fd = open(fichier, O_WRONLY | O_CREAT | O_EXCL, 0664);
+                    if (fd == -1) {
+            
+                     perror("open");
+                     exit(1);
+            
+                    }
+                    if (dup2(fd, STDERR_FILENO) == -1) {
+                        perror("dup2");
+                        exit(EXIT_FAILURE);
+                    }
+                    char **cmd = extraireMots(commande, " ");
+                   // printf("redirection milieu  avant execution cmd 0   \n");
+
+                    execvp(cmd[0], cmd);
+                    // En cas d'échec de l'exécution
+                    perror("execvp");
+                    exit(EXIT_FAILURE);
+                  
+                } else {
+                   // printf("else de redirection milieu  avant execution cmd 0   \n");
+
+                    //ulach redirection
+                    // Exécution de la commande sans redirection
+                                   
+
+                    char **cmd = extraireMots(tableauDesCommandes[i], " ");
+                    execvp(cmd[0], cmd);
+                    // En cas d'échec de l'exécution
+                    perror("execvp");
+                    exit(EXIT_FAILURE);
+
+                }
+
+            }
+            if(i == n-1)
+            {
+                write(STDERR_FILENO, "commande derniere \n",20);
+               
+                //dernier fils 
+                //dup sortie  + dup err
+                // Parcourir le tableau de mots pour trouver le symbole de redirection
+                int cpt[2]; int k=0;
+                char** mots = extraireMots(tableauDesCommandes[i]," ");
+
+                for (int j = 0; mots[j] != NULL; j++) {
+                     write(STDOUT_FILENO, mots[j],sizeof(mots[j]));
+                     write(STDOUT_FILENO, "\n",2);
+
+
+                    if (strcmp(mots[j], ">") == 0 || strcmp(mots[j], "2>") == 0)
+                    {
+                        cpt[k] = j;
+                        k++;
+
+                    }
+                    
+                 }
+                
+                if (k != 0) k--;
+
+                if(k != 0){
+                write(STDERR_FILENO, "commande derniere a une redirection  \n",39);
+               
+                    
+                
+
+                char cmd[1024] = "";
+                for (int j = 0; j < cpt[0]; j++) {
+                    strcat(cmd, mots[j]);
+                    strcat(cmd, " ");
+                }
+                 char * fichier = mots[cpt[0] + 1];
+                write(STDERR_FILENO, "commande dernier proc  \n",25);
+                write(STDERR_FILENO, cmd,sizeof(cmd));
+                write(STDERR_FILENO, "\n",2);
+
+                 int fd[2];
+                  for (int l = 0; l <= k; l++) {
+                    write(STDERR_FILENO, "nom des fichier \n",18);
+                    write(STDERR_FILENO, "\n",2);
+
+                    //write(STDERR_FILENO, mots[cpt[l]+1],sizeof(mots[cpt[l]+1]));
+                    //write(STDERR_FILENO, mots[cpt[l]+2],sizeof(mots[cpt[l]+2]));
+                    //write(STDERR_FILENO, "\n",2);
+
+                     if (strcmp(mots[cpt[l]], ">") == 0 || strcmp(mots[cpt[l]], "2>") == 0) {
+                             fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_EXCL, 0664);
+                    } 
+                 }
+
+                 // Redirection des flux
+                for (int l = 0; l <= k; l++) {
+                if ((strcmp(mots[cpt[l]], ">") == 0)) {
+                if (dup2(fd[l], STDOUT_FILENO) == -1) {
+                perror("dup2");
+                exit(EXIT_FAILURE);
+                } 
+                 } else if (strcmp(mots[cpt[l]], "2>") == 0) {
+                 if (dup2(fd[l], STDERR_FILENO) == -1) {
+                perror("dup2");
+                exit(EXIT_FAILURE);
+                 }
+                }
+             }
+               char **cmd1 = extraireMots(cmd, " ");
+               
+               
+                execvp(cmd1[0], cmd1);
+                // En cas d'échec de l'exécution
+                perror("execvp");
+                exit(EXIT_FAILURE);
+
+
+             }else{
+                //printf("cas deux dernier fils  sans redirection    \n");
+                
+                 char **cmd = extraireMots(tableauDesCommandes[i], " ");
+                execvp(cmd[0], cmd);
+                // En cas d'échec de l'exécution
+                perror("execvp");
+                exit(EXIT_FAILURE);
+
+             }   
+               
+            }
+            if( i == 0 )
+            {
+                write(STDERR_FILENO, "commande premiere\n",19);
+               
+                 
+
+                //dernier fils 
+                //dup sortie  + dup err
+                // Parcourir le tableau de mots pour trouver le symbole de redirection
+                int cpt[2]; int k=0;
+                char** mots = extraireMots(tableauDesCommandes[i]," ");
+
+                for (int j = 0; j <mots[j] != NULL; j++) {
+                  
+                    if (strcmp(mots[j], "<") == 0 || strcmp(mots[j], "2>") == 0)
+                    {
+                        
+                        cpt[k] = j;
+                        k++;
+
+                    }
+                   
+                }
+               
+                
+                if (k != 0) k--;
+                
+                if(k != 0){
+                    write(STDERR_FILENO, "commande debut cintient redirection \n",38);
+                
+               
+
+
+                char cmd[1024] = "";
+                for (int j = 0; j < cpt[0]; j++) {
+                    strcat(cmd, mots[j]);
+                    strcat(cmd, " ");
+                }
+                 char * fichier = mots[cpt[0] + 1];
+
+                 int fd[2];
+                  for (int l = 0; l <= k; l++) {
+                     if (strcmp(mots[cpt[l]], "2>") == 0) {
+                             fd[l] = open(mots[cpt[l]+1], O_WRONLY | O_CREAT | O_EXCL, 0664);
+                    } else if (strcmp(mots[cpt[l]], "<") == 0){
+                            fd[l] = open(mots[cpt[l]+1], O_RDONLY);
+                    }
+                 }
+
+                 // Redirection des flux
+                for (int l = 0; l <= k; l++) {
+                if ((strcmp(mots[cpt[l]], "<") == 0)) {
+                if (dup2(fd[l], STDIN_FILENO) == -1) {
+                perror("dup2");
+                exit(EXIT_FAILURE);
+                } 
+                 } else if (strcmp(mots[cpt[l]], "2>") == 0) {
+                 if (dup2(fd[l], STDERR_FILENO) == -1) {
+                perror("dup2");
+                exit(EXIT_FAILURE);
+                 }
+                }
+             }
+              char **cmd1 = extraireMots(cmd, " ");
+                execvp(cmd1[0], cmd1);
+                // En cas d'échec de l'exécution
+                perror("execvp");
+                exit(EXIT_FAILURE);
+
+
+             }else{
+                
+                 char **cmd = extraireMots(tableauDesCommandes[i], " ");
+                execvp(cmd[0], cmd);
+                // En cas d'échec de l'exécution
+                perror("execvp");
+                exit(EXIT_FAILURE);
+
+             } 
+                
+            }
+            
+        }
+    }
+
+    // Fermeture des descripteurs de tube dans le processus parent
+    for (int i = 0; i < n - 1; i++) {
+        close(tubes[i][0]);
+        close(tubes[i][1]);
+    }
+
+    // Attente de la fin des processus fils
+    for (int i = 0; i < n; i++) {
+        wait(NULL);
+    }
+
+    return 0;
+}
+
+
+int contientRedirection(const char *commande) {
+    const char *redirections[] = { ">", ">>", "<", "2>", "2>>", "&>", "&>>", NULL };
+    
+    for (int i = 0; redirections[i] != NULL; ++i) {
+        if (strstr(commande, redirections[i]) != NULL) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+

@@ -17,8 +17,17 @@ extern char* currentDir1; // stock le rep courant
 extern char* oldpath; // stock l'ancien rep courant
 extern int nb_jobs ;  
 extern char * tmpExtraire;
-//extern int jobs_surv[]; //les jobs a afficher avant chaque affichage du prompt sur err
-//extern int nb_jobssurv; ; 
+
+
+
+
+extern int saved_stdin;
+extern int saved_stdout;
+extern int saved_stderr;
+
+extern int estPipe;
+
+
 //définition de la structure du Prompt
 struct Prompt { 
     int ret;  //pour stocker la valeur de retour
@@ -62,7 +71,7 @@ int isReferenceValid(char *ref);
 int cd( char * ref);
 char *tronkString(const char *str, int size);
 char *afficherJsh();
-char **extraireMots(char *phrase, char *delimiteur);
+char ** extraireMots(char *phrase, char *delimiteur);
 int executerCommande(char * commande);
 int executerCmdArrierePlan(char* commande);
 void creerJob(char* commande, pid_t tableau_des_processus[]);
@@ -72,12 +81,15 @@ int Kill(char * commande);
 int killJob(char * signal,int id_job);
 int killProcessus(char * signal, pid_t pid);
 void UpdateJobs();
-void detecterNumJob(char *chaine);
-void afficherUnJob(int job_id);
+char* detecterNumJob(char *chaine);
+
 void affichageJobsModifies();
 void ignoreSignals();
 void restoreSignals();
 int executerCommandeGeneral(char * commande);
-
-
+int compterOccurrences(char *chaine, char caractere) ;
+int relancerJobArrierePlan(char* id_job);
+int relancerJobAvantPlan(char* id_job);
+int pipeline(char *commande);
+int contientRedirection(const char *commande);
 #endif

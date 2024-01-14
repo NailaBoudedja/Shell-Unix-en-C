@@ -23,6 +23,7 @@ int main() {
         
         ligne = afficherJsh();
         input  =  readline(ligne);  //affichage du prompt  + lecture de la commande entrée
+        
         free(ligne);
        
         if (input == NULL)   //si la commande entrée est vide 
@@ -34,9 +35,25 @@ int main() {
         {   
             
             add_history(input);  //ajout de la commande à l'historique du jsh
+            //printf("input dans main %s \n",input);
+               //UpdateJobs();
+    
+            char* caractere = " | ";
+            char * resultat = strstr(input, caractere);
+            if (resultat == NULL)
+           {
             jsh.ret = executerCommandeGeneral(input);
+           }
+           else {
+             
+             jsh.ret = pipeline(input);
+           }
+      
+             
+         estPipe = 0;
 
         }
+       
         
         free(input);   //libération de la memoire allouée pours inzput
     }
